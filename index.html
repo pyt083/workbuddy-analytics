@@ -1,0 +1,1670 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:,">
+<title>WorkBuddy 数据分析平台</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+/* ============ 全局基础 ============ */
+:root{
+  --primary:#2563eb;
+  --primary-dark:#1d4ed8;
+  --primary-light:#dbeafe;
+  --sidebar-bg:#0f172a;
+  --sidebar-hover:#1e293b;
+  --sidebar-active:#2563eb;
+  --bg:#f1f5f9;
+  --card-bg:#ffffff;
+  --border:#e2e8f0;
+  --text:#1e293b;
+  --text-sub:#64748b;
+  --up:#2563eb;
+  --down:#64748b;
+  --radius:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--text);font-size:14px;overflow:hidden;
+}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ============ 布局骨架 ============ */
+.app{display:flex;height:100vh}
+.sidebar{
+  width:220px;min-width:220px;background:var(--sidebar-bg);color:#cbd5e1;
+  display:flex;flex-direction:column;overflow-y:auto;
+}
+.sidebar-logo{
+  padding:18px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #1e293b;
+}
+.logo-dot{width:10px;height:10px;border-radius:3px;background:var(--primary);box-shadow:0 0 8px var(--primary)}
+.sidebar-logo .t{font-size:16px;font-weight:600;color:#fff}
+.sidebar-logo .s{font-size:10px;color:#64748b;display:block;margin-top:2px}
+.nav-group-title{
+  padding:14px 16px 6px;font-size:11px;color:#64748b;letter-spacing:2px;font-weight:600;
+}
+.nav-item{
+  display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;font-size:13px;
+  border-left:3px solid transparent;transition:background .15s;
+}
+.nav-item:hover{background:var(--sidebar-hover)}
+.nav-item.active{background:var(--sidebar-active);color:#fff;border-left-color:#60a5fa}
+.nav-item .ico{width:16px;text-align:center;font-style:normal}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.topbar{
+  height:56px;background:var(--card-bg);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 20px;gap:16px;flex-shrink:0;
+}
+.topbar .platform{font-size:16px;font-weight:700;color:var(--text)}
+.badge-mock{
+  font-size:11px;background:#fef3c7;color:#b45309;border:1px solid #fde68a;
+  padding:2px 8px;border-radius:10px;font-weight:500;
+}
+.badge-live{font-size:11px;background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;padding:2px 8px;border-radius:10px}
+.topbar-filter{margin-left:auto;display:flex;align-items:center;gap:8px}
+.tf-btn{
+  padding:5px 12px;border:1px solid var(--border);background:#fff;border-radius:6px;cursor:pointer;
+  font-size:12px;color:var(--text-sub);transition:all .15s;
+}
+.tf-btn:hover{border-color:var(--primary);color:var(--primary)}
+.tf-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.tf-custom{display:flex;align-items:center;gap:4px}
+.tf-custom input[type=date]{
+  border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:12px;color:var(--text);
+}
+.content{flex:1;overflow-y:auto;padding:20px}
+.page{display:none}
+.page.active{display:block}
+
+/* ============ 通用组件 ============ */
+.card{
+  background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px;margin-bottom:16px;
+}
+.card-title{font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card-title .sub{font-size:12px;font-weight:400;color:var(--text-sub)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.grid-6{display:grid;grid-template-columns:repeat(6,1fr);gap:16px}
+.chart{width:100%;height:320px}
+.chart-sm{width:100%;height:260px}
+.chart-lg{width:100%;height:400px}
+
+/* 指标卡 */
+.stat-card{position:relative}
+.stat-card .label{font-size:12px;color:var(--text-sub);margin-bottom:8px}
+.stat-card .value{font-size:26px;font-weight:700;line-height:1.2}
+.stat-card .delta{font-size:12px;margin-top:6px;display:flex;align-items:center;gap:4px}
+.delta.up{color:var(--up)}
+.delta.down{color:var(--down)}
+.delta.flat{color:var(--text-sub)}
+
+/* 表格 */
+.table-wrap{overflow-x:auto}
+table.tbl{width:100%;border-collapse:collapse;font-size:13px}
+table.tbl th,table.tbl td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+table.tbl th{background:#f8fafc;color:var(--text-sub);font-weight:600;position:sticky;top:0;cursor:default}
+table.tbl th.sortable{cursor:pointer}
+table.tbl th.sortable:hover{color:var(--primary)}
+table.tbl th .arr{font-size:10px;margin-left:2px}
+table.tbl tr.data-row{cursor:pointer}
+table.tbl tr.data-row:hover{background:#f0f7ff}
+table.tbl tr.detail-row td{background:#f8fafc;padding:12px 16px;border-bottom:2px solid var(--primary-light)}
+.tbl-scroll{max-height:520px;overflow:auto;border:1px solid var(--border);border-radius:6px}
+.pager{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--text-sub)}
+.pager button{
+  padding:4px 10px;border:1px solid var(--border);background:#fff;border-radius:4px;cursor:pointer;font-size:12px;
+}
+.pager button:disabled{opacity:.4;cursor:not-allowed}
+.pager button:not(:disabled):hover{border-color:var(--primary);color:var(--primary)}
+
+/* 排行榜 */
+.rank-list{list-style:none}
+.rank-list li{
+  display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px dashed var(--border);font-size:13px;
+}
+.rank-list li:last-child{border-bottom:none}
+.rank-no{
+  width:20px;height:20px;border-radius:4px;background:#e2e8f0;color:var(--text-sub);
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;
+}
+.rank-no.r1{background:#fde68a;color:#92400e}
+.rank-no.r2{background:#e2e8f0;color:#475569}
+.rank-no.r3{background:#fed7aa;color:#9a3412}
+.rank-list .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank-list .val{font-weight:600;color:var(--primary)}
+
+/* 筛选器 */
+.filter-bar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;align-items:center}
+.filter-bar label{font-size:12px;color:var(--text-sub)}
+.filter-bar select,.filter-bar input[type=text]{
+  border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;background:#fff;color:var(--text);
+  max-width:160px;
+}
+.filter-bar select:focus,.filter-bar input:focus{outline:none;border-color:var(--primary)}
+.btn{
+  padding:6px 14px;border:1px solid var(--primary);background:var(--primary);color:#fff;
+  border-radius:6px;cursor:pointer;font-size:12px;transition:background .15s;
+}
+.btn:hover{background:var(--primary-dark)}
+.btn-ghost{background:#fff;color:var(--primary)}
+.btn-ghost:hover{background:var(--primary-light)}
+.mode-tabs{display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:max-content}
+.mode-tabs .tab{
+  padding:6px 16px;font-size:12px;cursor:pointer;background:#fff;color:var(--text-sub);border-right:1px solid var(--border);
+}
+.mode-tabs .tab:last-child{border-right:none}
+.mode-tabs .tab.active{background:var(--primary);color:#fff}
+
+/* 组织树 */
+.org-layout{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start}
+.tree-box{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:10px;max-height:640px;overflow:auto}
+.tree-node .row{
+  display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:5px;cursor:pointer;font-size:13px;
+}
+.tree-node .row:hover{background:#f0f7ff}
+.tree-node .row.selected{background:var(--primary-light);color:var(--primary-dark);font-weight:600}
+.tree-toggle{width:14px;font-size:10px;color:var(--text-sub);cursor:pointer;flex-shrink:0}
+.tree-toggle.leaf{visibility:hidden}
+.tree-children{margin-left:18px;border-left:1px dashed var(--border);padding-left:6px;display:none}
+.tree-node.open>.tree-children{display:block}
+.tree-toggle.open{transform:rotate(90deg)}
+.kv-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.kv{background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:10px 12px}
+.kv .k{font-size:11px;color:var(--text-sub)}
+.kv .v{font-size:20px;font-weight:700;margin-top:4px}
+
+/* 对话记录 */
+.dlg-box{border:1px solid var(--border);border-radius:6px;padding:8px;max-height:300px;overflow:auto;background:#fbfdff}
+.dlg-round{border:1px solid #e2e8f0;border-radius:6px;margin-bottom:6px;background:#fff}
+.dlg-round>.rh{
+  padding:5px 10px;font-size:12px;color:var(--text-sub);cursor:pointer;background:#f1f5f9;border-radius:6px;
+  display:flex;gap:8px;align-items:center;
+}
+.dlg-round>.rb{padding:8px 12px;font-size:12px;line-height:1.7;display:none;border-top:1px dashed var(--border)}
+.dlg-round.open>.rb{display:block}
+.dlg-round .u{color:var(--primary);font-weight:600}
+.dlg-round .a{color:#0f766e;font-weight:600}
+.tag{display:inline-block;padding:1px 8px;border-radius:9px;font-size:11px;background:var(--primary-light);color:var(--primary-dark)}
+.tag.gray{background:#f1f5f9;color:var(--text-sub)}
+.muted{color:var(--text-sub);font-size:12px}
+.hint-card{
+  border-left:3px solid var(--primary);background:var(--primary-light);border-radius:6px;padding:12px 14px;
+  font-size:12px;line-height:1.8;color:#1e3a8a;margin-bottom:16px;
+}
+.hint-card code{background:#fff;padding:1px 6px;border-radius:4px;font-size:11px;border:1px solid #bfdbfe}
+.feat-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.feat-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px}
+.feat-card .h{font-weight:600;font-size:13px;margin-bottom:8px;color:var(--primary-dark)}
+.feat-card p{font-size:12px;color:var(--text-sub);line-height:1.7}
+.saved-report-item{
+  display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border:1px solid var(--border);
+  border-radius:6px;margin-bottom:6px;font-size:12px;background:#f8fafc;
+}
+.saved-report-item .ops button{margin-left:6px;border:none;background:none;cursor:pointer;color:var(--primary);font-size:12px}
+.empty-tip{padding:40px;text-align:center;color:var(--text-sub);font-size:13px}
+@media (max-width:1200px){
+  .grid-6{grid-template-columns:repeat(3,1fr)}
+  .kv-grid{grid-template-columns:repeat(2,1fr)}
+  .grid-3{grid-template-columns:1fr}
+  .grid-2{grid-template-columns:1fr}
+  .org-layout{grid-template-columns:1fr}
+  .feat-cards{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-dot"></span>
+      <div><span class="t">WorkBuddy</span><span class="s">数据分析平台</span></div>
+    </div>
+    <div class="nav-group-title">数据</div>
+    <div class="nav-item active" data-page="overview"><i class="ico">▦</i>总览看板</div>
+    <div class="nav-item" data-page="org"><i class="ico">⌘</i>组织架构视图</div>
+    <div class="nav-item" data-page="users"><i class="ico">☰</i>用户明细</div>
+    <div class="nav-item" data-page="tasks"><i class="ico">≡</i>任务明细</div>
+    <div class="nav-group-title">数据分析</div>
+    <div class="nav-item" data-page="category"><i class="ico">◔</i>任务分类分析</div>
+    <div class="nav-item" data-page="position"><i class="ico">◫</i>岗位/业务分析</div>
+    <div class="nav-item" data-page="prompt"><i class="ico">✎</i>提示词与产物分析</div>
+    <div class="nav-item" data-page="dialogue"><i class="ico">⇄</i>多轮对话分析</div>
+    <div class="nav-item" data-page="upload"><i class="ico">⇪</i>上传资料分析</div>
+    <div class="nav-item" data-page="report"><i class="ico">⊞</i>自定义报表</div>
+  </aside>
+  <div class="main">
+    <div class="topbar">
+      <span class="platform">WorkBuddy 数据分析平台</span>
+      <span class="badge-mock" id="dataSourceBadge">演示数据（Mock）</span>
+      <div class="topbar-filter">
+        <button class="tf-btn" data-range="today">今天</button>
+        <button class="tf-btn" data-range="week">本周</button>
+        <button class="tf-btn" data-range="month">本月</button>
+        <button class="tf-btn active" data-range="90d">近90天</button>
+        <span class="tf-custom">
+          <input type="date" id="dateFrom" title="开始日期"> ~
+          <input type="date" id="dateTo" title="结束日期">
+          <button class="btn" id="applyCustom" style="padding:4px 10px">应用</button>
+        </span>
+      </div>
+    </div>
+    <div class="content" id="content">
+      <!-- ================= 1. 总览看板 ================= -->
+      <section class="page active" id="page-overview">
+        <div class="grid-6" id="overviewStats"></div>
+        <div class="card">
+          <div class="card-title">任务量与活跃用户趋势
+            <span class="sub" id="overviewTrendSub"></span>
+            <span style="margin-left:auto;display:flex;gap:6px">
+              <button class="tf-btn active" data-gran="day">按天</button>
+              <button class="tf-btn" data-gran="week">按周</button>
+              <button class="tf-btn" data-gran="month">按月</button>
+            </span>
+          </div>
+          <div id="overviewTrendChart" class="chart-lg"></div>
+        </div>
+        <div class="grid-3">
+          <div class="card"><div class="card-title">任务量 Top5 部门</div><ol class="rank-list" id="rankDept"></ol></div>
+          <div class="card"><div class="card-title">任务量 Top10 个人</div><ol class="rank-list" id="rankUser"></ol></div>
+          <div class="card"><div class="card-title">任务量 Top5 类别</div><ol class="rank-list" id="rankCat"></ol></div>
+        </div>
+        <div class="hint-card" id="apiGuideCard">
+          <b>API 数据接入指引</b>：当前展示为演示数据（Mock）。后续接入真实数据请通过 <b>WorkBuddy 开放平台 OAuth2.1</b>：先将用户引导至授权端点
+          <code>https://www.workbuddy.cn/openapi/v2/authorize</code> 获取授权码并换取 access_token，再调用
+          <code>GET /openapi/v2/tasks</code> 拉取任务列表。前端已预留 <code>DataAdapter</code> 接口层（见源码中
+          <code>MockDataSource</code>），届时替换为 <code>ApiDataSource</code> 实现即可无缝切换，页面无需改动。
+        </div>
+      </section>
+
+      <!-- ================= 2. 组织架构视图 ================= -->
+      <section class="page" id="page-org">
+        <div class="card">
+          <div class="mode-tabs" id="orgModeTabs">
+            <span class="tab active" data-mode="org">按组织架构</span>
+            <span class="tab" data-mode="user">按用户</span>
+            <span class="tab" data-mode="task">按任务详情</span>
+          </div>
+        </div>
+        <div class="org-layout">
+          <div>
+            <div class="card" style="padding:10px">
+              <div class="card-title" style="margin-bottom:8px">组织树 <span class="sub">点击名称查看统计，点击箭头展开</span></div>
+              <div id="orgTree" class="tree-box" style="max-height:600px"></div>
+            </div>
+          </div>
+          <div>
+            <div class="card">
+              <div class="card-title" id="orgPanelTitle">层级汇总</div>
+              <div class="kv-grid" id="orgSummary"></div>
+            </div>
+            <div class="card" id="orgMemberCard">
+              <div class="card-title">
+                <span id="orgMemberTitle">下级成员</span>
+                <span style="margin-left:auto">排序：
+                  <select id="orgSortSel">
+                    <option value="tasks">任务数</option>
+                    <option value="rounds">对话轮次</option>
+                    <option value="outputs">产物数</option>
+                  </select>
+                </span>
+              </div>
+              <div class="tbl-scroll"><table class="tbl" id="orgMemberTable"></table></div>
+            </div>
+            <div class="card" id="orgPieCard">
+              <div class="card-title">任务类别分布</div>
+              <div id="orgPieChart" class="chart"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 3. 用户明细 ================= -->
+      <section class="page" id="page-users">
+        <div class="card">
+          <div class="filter-bar">
+            <input type="text" id="userSearchInput" placeholder="搜索姓名 / 工号 / 部门 / 岗位…" style="max-width:280px">
+            <button class="btn" id="userSearchBtn">搜索</button>
+            <button class="btn btn-ghost" id="userResetBtn">重置</button>
+            <span style="margin-left:auto" class="muted">共 <b id="userCount"></b> 人 · 点击行展开个人详情</span>
+          </div>
+          <div class="tbl-scroll" style="max-height:560px">
+            <table class="tbl" id="userTable">
+              <thead>
+                <tr>
+                  <th class="sortable" data-key="name">姓名</th>
+                  <th class="sortable" data-key="empId">工号</th>
+                  <th class="sortable" data-key="dept">部门</th>
+                  <th>岗位</th>
+                  <th>业务分类</th>
+                  <th class="sortable" data-key="tasks">任务数</th>
+                  <th class="sortable" data-key="rounds">对话轮次</th>
+                  <th class="sortable" data-key="outputs">产物数</th>
+                  <th class="sortable" data-key="uploads">上传资料数</th>
+                  <th class="sortable" data-key="lastActive">最近活跃</th>
+                </tr>
+              </thead>
+              <tbody id="userTbody"></tbody>
+            </table>
+          </div>
+          <div class="pager" id="userPager"></div>
+        </div>
+      </section>
+
+      <!-- ================= 4. 任务明细 ================= -->
+      <section class="page" id="page-tasks">
+        <div class="card">
+          <div class="filter-bar">
+            <label>部门</label><select id="taskFDept"></select>
+            <label>用户</label><select id="taskFUser"></select>
+            <label>类别</label><select id="taskFCat"></select>
+            <label>岗位</label><select id="taskFPos"></select>
+            <label>业务线</label><select id="taskFBiz"></select>
+            <button class="btn btn-ghost" id="taskResetBtn">重置</button>
+            <button class="btn" id="taskExportBtn">导出 CSV</button>
+          </div>
+          <div class="tbl-scroll" style="max-height:600px">
+            <table class="tbl" id="taskTable">
+              <thead>
+                <tr>
+                  <th>任务ID</th><th>标题</th><th>用户</th><th>部门</th><th>任务类别</th>
+                  <th>岗位</th><th>业务线</th><th>对话轮次</th><th>产物数</th><th>时间</th><th>状态</th>
+                </tr>
+              </thead>
+              <tbody id="taskTbody"></tbody>
+            </table>
+          </div>
+          <div class="pager" id="taskPager"></div>
+        </div>
+      </section>
+
+      <!-- ================= 5. 任务分类分析 ================= -->
+      <section class="page" id="page-category">
+        <div class="grid-2">
+          <div class="card"><div class="card-title">任务类别占比</div><div id="catPieChart" class="chart"></div></div>
+          <div class="card"><div class="card-title">各类别任务数量</div><div id="catBarChart" class="chart"></div></div>
+        </div>
+        <div class="card"><div class="card-title">类别趋势（堆叠面积图）<span class="sub">点击图表元素可下钻</span></div>
+          <div id="catAreaChart" class="chart-lg"></div>
+        </div>
+        <div class="card" id="catDrillCard" style="display:none">
+          <div class="card-title"><span id="catDrillTitle"></span>
+            <button class="btn btn-ghost" id="catDrillClose" style="margin-left:auto">关闭</button>
+          </div>
+          <div class="tbl-scroll" style="max-height:400px"><table class="tbl" id="catDrillTable"></table></div>
+          <div class="pager" id="catDrillPager"></div>
+        </div>
+      </section>
+
+      <!-- ================= 6. 岗位/业务分析 ================= -->
+      <section class="page" id="page-position">
+        <div class="grid-2">
+          <div class="card"><div class="card-title">岗位 × 任务类别 热力图</div><div id="posHeatChart" class="chart-lg"></div></div>
+          <div class="card"><div class="card-title">业务线 × 任务类别 热力图</div><div id="bizHeatChart" class="chart-lg"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">交叉统计表（岗位 × 任务类别）
+            <button class="btn btn-ghost" id="crossExportBtn" style="margin-left:auto">导出 CSV</button>
+          </div>
+          <div class="tbl-scroll"><table class="tbl" id="crossTable"></table></div>
+        </div>
+      </section>
+
+      <!-- ================= 7. 提示词与产物分析 ================= -->
+      <section class="page" id="page-prompt">
+        <div class="grid-2">
+          <div class="card"><div class="card-title">提示词长度分布</div><div id="promptHistChart" class="chart"></div></div>
+          <div class="card"><div class="card-title">高频关键词 Top15</div><div id="kwBarChart" class="chart"></div></div>
+        </div>
+        <div class="card"><div class="card-title">产物类型分布</div><div id="outputPieChart" class="chart"></div></div>
+      </section>
+
+      <!-- ================= 8. 多轮对话分析 ================= -->
+      <section class="page" id="page-dialogue">
+        <div class="grid-3">
+          <div class="card"><div class="card-title">对话轮次分布</div><div id="roundDistChart" class="chart-sm"></div></div>
+          <div class="card"><div class="card-title">各部门平均轮次</div><div id="deptRoundChart" class="chart-sm"></div></div>
+          <div class="card"><div class="card-title">各岗位平均轮次</div><div id="posRoundChart" class="chart-sm"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">高轮次任务特征（轮次 ≥ 7）</div>
+          <div class="feat-cards" id="featCards"></div>
+        </div>
+      </section>
+
+      <!-- ================= 9. 上传资料分析 ================= -->
+      <section class="page" id="page-upload">
+        <div class="grid-2">
+          <div class="card"><div class="card-title">资料类型分布</div><div id="uploadPieChart" class="chart"></div></div>
+          <div class="card"><div class="card-title">上传频次 Top10 用户</div><div id="uploadTopChart" class="chart"></div></div>
+        </div>
+        <div class="card"><div class="card-title">资料类型 × 任务类别 热力图</div><div id="uploadHeatChart" class="chart-lg"></div></div>
+      </section>
+
+      <!-- ================= 10. 自定义报表 ================= -->
+      <section class="page" id="page-report">
+        <div class="card">
+          <div class="filter-bar" style="margin-bottom:8px">
+            <label>维度</label>
+            <select id="reportDim">
+              <option value="day">时间（按天）</option>
+              <option value="week">时间（按周）</option>
+              <option value="month">时间（按月）</option>
+              <option value="dept">部门</option>
+              <option value="position">岗位</option>
+              <option value="category">任务类别</option>
+            </select>
+            <label>指标</label>
+            <span id="reportMetrics" style="display:flex;gap:10px;font-size:12px">
+              <label><input type="checkbox" value="tasks" checked> 任务数</label>
+              <label><input type="checkbox" value="rounds"> 对话轮次</label>
+              <label><input type="checkbox" value="outputs"> 产物数</label>
+              <label><input type="checkbox" value="uploads"> 上传资料数</label>
+            </span>
+            <button class="btn" id="reportGenBtn">生成报表</button>
+            <button class="btn btn-ghost" id="reportSaveBtn">保存为常用报表</button>
+          </div>
+        </div>
+        <div class="card" id="reportSavedCard">
+          <div class="card-title">常用报表（localStorage）</div>
+          <div id="savedReports"></div>
+        </div>
+        <div class="card" id="reportChartCard" style="display:none">
+          <div class="card-title"><span id="reportChartTitle"></span></div>
+          <div id="reportChart" class="chart-lg"></div>
+        </div>
+        <div class="card" id="reportTableCard" style="display:none">
+          <div class="card-title">明细数据
+            <button class="btn btn-ghost" id="reportExportBtn" style="margin-left:auto">导出 CSV</button>
+          </div>
+          <div class="tbl-scroll"><table class="tbl" id="reportTable"></table></div>
+        </div>
+      </section>
+
+<script>
+/* =========================================================================
+ * WorkBuddy 数据分析平台 —— 单页看板（纯静态，可直接托管于 GitHub Pages）
+ * 所有数据由内置 Mock 数据生成器产生（固定 seed，刷新后数据一致）。
+ * ========================================================================= */
+
+/* ---------- 0. 基础工具 ---------- */
+// 固定种子伪随机数生成器（mulberry32），保证每次刷新数据完全一致
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+var SEED=20260929;
+var rand=mulberry32(SEED);
+function ri(a,b){return a+Math.floor(rand()*(b-a+1));}
+function pk(arr){return arr[Math.floor(rand()*arr.length)];}
+function wpick(pairs){ // pairs: [[value, weight], ...]
+  var total=0,i;for(i=0;i<pairs.length;i++)total+=pairs[i][1];
+  var r=rand()*total,acc=0;
+  for(i=0;i<pairs.length;i++){acc+=pairs[i][1];if(r<acc)return pairs[i][0];}
+  return pairs[pairs.length-1][0];
+}
+function pad(n){var s=String(n);return s.length<2?'0'+s:s;}
+function fmtDate(ts){var d=new Date(ts);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function fmtDT(ts){var d=new Date(ts);return fmtDate(ts)+' '+pad(d.getHours())+':'+pad(d.getMinutes());}
+function dayStart(ts){var d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtNum(n){n=Math.round(n*100)/100;return n.toLocaleString('zh-CN');}
+function pct(v,base){if(!base)return 0;return Math.round((v-base)/base*1000)/10;}
+
+/* ---------- 1. Mock 数据模型定义 ---------- */
+var DEPTS=[
+  {name:'产品部',subs:[{name:'产品规划组',count:24},{name:'用户体验组',count:16}],positions:['产品经理','高级产品经理','产品运营']},
+  {name:'研发部',subs:[{name:'前端组',count:20},{name:'后端组',count:24},{name:'测试组',count:16}],positions:['前端工程师','后端工程师','测试工程师']},
+  {name:'设计部',subs:[{name:'视觉设计组',count:16},{name:'交互设计组',count:14}],positions:['视觉设计师','交互设计师']},
+  {name:'市场部',subs:[{name:'品牌组',count:18},{name:'渠道组',count:17}],positions:['市场专员','品牌策划']},
+  {name:'运营部',subs:[{name:'用户运营组',count:20},{name:'内容运营组',count:15}],positions:['运营专员','内容运营']}
+];
+var BIZ=[['智影',30],['智剪',25],['智图',25],['中台',20]];
+var CATS=['文档写作','视频生成','图片设计','数据分析','代码开发','PPT制作','翻译','其他'];
+var CAT_W=[['文档写作',18],['视频生成',14],['图片设计',13],['数据分析',14],['代码开发',13],['PPT制作',12],['翻译',8],['其他',8]];
+var VARS=['双十一大促','Q3复盘','新品发布','618活动','年会筹备','渠道拓展','用户增长','数据治理','品牌焕新','内部培训','国际化','季度汇报'];
+var TITLES={
+  '文档写作':['撰写{v}的营销文案','整理{v}的会议纪要','输出{v}的周报总结','起草{v}的项目立项文档','编写{v}的产品需求文档'],
+  '视频生成':['生成{v}的营销视频脚本','制作{v}的产品宣传片','构思{v}的短视频脚本','输出{v}的口播文案'],
+  '图片设计':['绘制{v}的业务流程图','设计{v}的活动海报','生成{v}的社交媒体配图','制作{v}的信息图'],
+  '数据分析':['搭建{v}的运营数据看板','分析{v}的转化漏斗','输出{v}的数据分析报告','统计{v}的核心指标'],
+  '代码开发':['开发{v}的前端组件','修复{v}页面的兼容性Bug','编写{v}的数据处理脚本','优化{v}的接口性能'],
+  'PPT制作':['制作{v}的汇报PPT','生成{v}的对外提案PPT','整理{v}的季度总结PPT'],
+  '翻译':['翻译{v}的产品说明书','翻译{v}的合同文件','翻译{v}的技术文档'],
+  '其他':['处理{v}的相关事项','协助{v}的跨部门协作','归档{v}的资料']
+};
+var PROMPT_MAIN={
+  '文档写作':'请围绕「{v}」帮我撰写{title}，要求内容结构清晰、语言专业严谨，突出重点数据和结论。',
+  '视频生成':'请为「{v}」生成{title}，节奏明快、有网感，开头三秒必须抓住观众注意力。',
+  '图片设计':'请绘制{title}（主题：{v}），风格简洁现代，主色调使用品牌蓝。',
+  '数据分析':'请基于近期数据完成{title}（场景：{v}），给出关键指标变化与归因分析。',
+  '代码开发':'请帮我{title}（项目：{v}），代码需要符合团队规范，附带必要的注释。',
+  'PPT制作':'请制作{title}（主题：{v}），逻辑清晰、图表美观，控制在15页以内。',
+  '翻译':'请将{title}（关于{v}）翻译为中文，保持术语一致，符合商务表达习惯。',
+  '其他':'请协助完成{title}（{v}），内容完整、条理清楚。'
+};
+var PROMPT_EXT=['请先列出大纲再展开正文。','注意口语化表达，避免生硬的书面语。','数据部分请用表格呈现。','结尾附上要点摘要。',
+  '字数控制在800字左右。','请给出两个备选方案供选择。','注意控制整体篇幅，重点前置。','涉及专有名词请保持原文。'];
+var OUT_TYPES=['文档','表格','PPT','代码','图片','视频'];
+var CAT_OUT_TYPE={
+  '文档写作':[['文档',60],['表格',15],['PPT',10],['图片',10],['代码',5]],
+  '视频生成':[['视频',55],['文档',25],['图片',15],['表格',5]],
+  '图片设计':[['图片',55],['文档',20],['PPT',15],['视频',10]],
+  '数据分析':[['表格',35],['文档',30],['图片',15],['代码',10],['PPT',10]],
+  '代码开发':[['代码',60],['文档',20],['表格',10],['图片',10]],
+  'PPT制作':[['PPT',70],['文档',15],['图片',15]],
+  '翻译':[['文档',90],['表格',10]],
+  '其他':[['文档',40],['表格',20],['图片',15],['PPT',15],['代码',10]]
+};
+var UP_TYPES=[['PDF',30],['Word',25],['Excel',20],['图片',12],['PPT',8],['其他',5]];
+var DLG_USER=['把语气调整得更正式一些。','篇幅太长了，请压缩到一半。','第二部分再补充一些数据支撑。','换一种结构重新组织内容。',
+  '请在结尾增加一段总结。','数据部分改成表格形式呈现。','针对目标用户再优化一下表达。','增加一个竞品对比的视角。',
+  '标题再吸引人一些。','把要点提炼成三句话。'];
+var DLG_AI=['好的，已按要求调整，以下是修改后的版本。','收到，我补充了相关内容，请查看。','明白，以下是优化后的结果。',
+  '已按您的建议重构了内容结构。','好的，以下是调整后的版本，如有其他要求请继续告诉我。'];
+var SURNAMES='王李张刘陈杨赵黄周吴徐孙胡朱高林何郭马罗梁宋郑谢韩唐冯于董萧程曹袁邓许傅沈曾彭吕苏卢蒋蔡贾丁魏薛叶阎余潘杜戴夏';
+var GIVEN='伟芳娜敏静磊军洋勇艳杰娟涛明超霞平刚辉丽强燕波斌宏坤楠鑫晶玉婷浩宇欣怡子萱博文昊然思远梦琪';
+
+/* ---------- 2. Mock 数据生成（固定 seed） ---------- */
+function buildUsers(){
+  var users=[],used={},empSeq=1,i,j,k,s='',g1='';
+  function mkName(){
+    for(var t=0;t<60;t++){
+      s=SURNAMES[Math.floor(rand()*SURNAMES.length)];
+      g1=GIVEN[Math.floor(rand()*GIVEN.length)];
+      var g2=rand()<0.55?GIVEN[Math.floor(rand()*GIVEN.length)]:'';
+      var n=s+g1+g2;
+      if(!used[n]){used[n]=1;return n;}
+    }
+    return s+g1;
+  }
+  for(i=0;i<DEPTS.length;i++){
+    var d=DEPTS[i];
+    for(j=0;j<d.subs.length;j++){
+      for(k=0;k<d.subs[j].count;k++){
+        var eid=empSeq++;
+        users.push({
+          empId:'WB'+(eid<10?'000'+eid:(eid<100?'00'+eid:(eid<1000?'0'+eid:''+eid))), // 工号 WB0001 起
+          name:mkName(),
+          dept:d.name,sub:d.subs[j].name,
+          position:pk(d.positions),
+          biz:wpick(BIZ)
+        });
+      }
+    }
+  }
+  return users;
+}
+function buildTasks(users){
+  var tasks=[],today=dayStart(Date.now()),idx=1;
+  for(var u=0;u<users.length;u++){
+    var n=12+ri(0,20); // 每人 12~32 条任务，覆盖近180天（近90天约占一半，保证环比/自定义区间有基线数据）
+    for(var t=0;t<n;t++){
+      var cat=wpick(CAT_W);
+      var titleTpl=pk(TITLES[cat]);
+      var v=pk(VARS);
+      var title=titleTpl.replace('{v}',v).replace(/^(生成|撰写|制作|设计|绘制|搭建|分析|输出|统计|开发|修复|编写|优化|起草|整理|翻译|处理|协助|归档|构思)/,'');
+      if(title.length<4)title=titleTpl.replace('{v}',v);
+      // 提示词：主句 + 0~4 个扩展要求，长度自然分布（派生提示词长度/关键词口径）
+      var main=PROMPT_MAIN[cat].replace('{v}',v).replace('{title}',titleTpl.replace('{v}',v).slice(0,14));
+      var exts=[],eN=ri(0,4);
+      for(var e=0;e<eN;e++)exts.push(PROMPT_EXT[Math.floor(rand()*PROMPT_EXT.length)]);
+      var prompt=main+(exts.length?' '+exts.join(''):'');
+      // 对话轮次 1~12（低轮次为主）
+      var rounds=Math.max(1,Math.min(12,1+Math.floor(Math.pow(rand(),1.9)*12.5)));
+      // 产物 0~5
+      var outN=wpick([[0,8],[1,22],[2,30],[3,22],[4,12],[5,6]]);
+      var outputs=[],pool=CAT_OUT_TYPE[cat];
+      for(var o=0;o<outN;o++)outputs.push({type:wpick(pool),name:'产物-'+taskNo(idx)+'-'+pad(o+1)});
+      // 上传资料 0~3
+      var upN=wpick([[0,30],[1,35],[2,22],[3,13]]);
+      var uploads=[];
+      for(var p=0;p<upN;p++)uploads.push({type:wpick(UP_TYPES),name:'资料-'+v.slice(0,4)+'-'+pad(p+1)});
+      // 时间：近 180 天内随机
+      var ts=today-ri(0,179)*86400000+ri(8,21)*3600000+ri(0,59)*60000;
+      tasks.push({
+        id:'T'+(10000+idx),
+        title:title,
+        userIdx:u,
+        category:cat,
+        rounds:rounds,
+        outputs:outputs,
+        outCount:outputs.length,
+        uploads:uploads,
+        upCount:uploads.length,
+        prompt:prompt,
+        promptLen:prompt.length,
+        time:ts,
+        day:fmtDate(ts),
+        status:wpick([['已完成',75],['进行中',15],['已取消',10]])
+      });
+      idx++;
+    }
+  }
+  return tasks;
+}
+function taskNo(idx){return idx<10?'000'+idx:(idx<100?'00'+idx:(idx<1000?'0'+idx:''+idx));}
+// 生成某任务的多轮对话记录（惰性生成并缓存，内容由任务 ID 决定，保证稳定）
+function dialogOf(task){
+  if(task.dlg)return task.dlg;
+  var r=mulberry32(SEED+parseInt(task.id.slice(1))*97);
+  var dlgs=[{role:'user',text:task.prompt},{role:'ai',text:'好的，我来帮您处理。以下是根据您的需求生成的内容，请查阅。'}];
+  for(var i=1;i<task.rounds;i++){
+    dlgs.push({role:'user',text:DLG_USER[Math.floor(r()*DLG_USER.length)]});
+    dlgs.push({role:'ai',text:DLG_AI[Math.floor(r()*DLG_AI.length)]});
+  }
+  task.dlg=dlgs;
+  return dlgs;
+}
+
+/* ---------- 3. DataAdapter 数据接入层 ---------- */
+/**
+ * 数据接入层：页面所有统计均通过 DataAdapter.load() 取数。
+ * 当前为 MockDataSource（本地 Mock）。接入真实数据时，实现一个相同接口的
+ * ApiDataSource（WorkBuddy 开放平台 OAuth2.1：
+ *   授权端点 https://www.workbuddy.cn/openapi/v2/authorize
+ *   任务列表 GET /openapi/v2/tasks ）
+ * 并替换 DataAdapter.source 即可，页面其余代码无需改动。
+ */
+var MockDataSource={
+  name:'演示数据（Mock）',
+  load:function(){
+    var users=buildUsers();
+    var tasks=buildTasks(users);
+    return {source:'mock',users:users,tasks:tasks};
+  }
+};
+var ApiDataSource={ // 预留占位：未来接入开放平台时实现 load()
+  name:'开放平台数据',
+  load:function(){throw new Error('ApiDataSource 尚未接入：请通过 WorkBuddy 开放平台 OAuth2.1 获取 access_token 后实现 GET /openapi/v2/tasks 拉取');}
+};
+var DataAdapter={source:MockDataSource,load:function(){return this.source.load();}};
+
+var DATA=DataAdapter.load();
+var USERS=DATA.users;
+var TASKS=DATA.tasks;
+var POSITIONS=(function(){var m={},a=[];USERS.forEach(function(u){if(!m[u.position]){m[u.position]=1;a.push(u.position);}});return a;})();
+var BIZS=(function(){var m={},a=[];USERS.forEach(function(u){if(!m[u.biz]){m[u.biz]=1;a.push(u.biz);}});return a;})();
+var TASKS_BY_USER=(function(){var m=[],i;for(i=0;i<USERS.length;i++)m[i]=[];TASKS.forEach(function(t){m[t.userIdx].push(t);});return m;})();
+
+/* ---------- 4. 全局状态 ---------- */
+var state={
+  page:'overview',
+  rangeKey:'90d',
+  rangeStart:0,rangeEnd:0,
+  granularity:'day',
+  userQuery:'',userSortKey:'tasks',userSortDir:-1,userPage:1,userOpen:-1,
+  orgSelected:'root',orgMode:'org',orgSort:'tasks',
+  taskFilters:{dept:'',user:'',cat:'',pos:'',biz:''},taskPage:1,taskOpen:'',
+  catDrill:null,catDrillPage:1,
+  report:{dim:'day',metrics:['tasks'],lastRows:null,lastTitle:''},
+  savedReports:[],reportPage:1
+};
+
+/* ---------- 5. 时间筛选与过滤聚合 ---------- */
+var DAY_MS=86400000;
+function weekKey(ts){var d=new Date(ts);var dow=(d.getDay()+6)%7;d.setDate(d.getDate()-dow);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());} // 以该周周一的日期字符串作桶 key，跨月不会错误合并
+function monthKey(ts){var d=new Date(ts);return d.getFullYear()+'-'+pad(d.getMonth()+1);}
+function applyRange(key){
+  var now=Date.now(),d=new Date();
+  state.rangeKey=key;
+  if(key==='today'){state.rangeStart=dayStart(now);state.rangeEnd=now;}
+  else if(key==='week'){var dow=(d.getDay()+6)%7;state.rangeStart=dayStart(now)-dow*DAY_MS;state.rangeEnd=now;}
+  else if(key==='month'){state.rangeStart=dayStart(new Date(d.getFullYear(),d.getMonth(),1).getTime());state.rangeEnd=now;}
+  else if(key==='90d'){state.rangeStart=dayStart(now)-89*DAY_MS;state.rangeEnd=now;}
+  else if(key==='custom'){
+    var f=document.getElementById('dateFrom').value,t=document.getElementById('dateTo').value;
+    if(!f||!t){alert('请选择起止日期');return false;}
+    var s=new Date(f+'T00:00:00').getTime(),e=new Date(t+'T23:59:59').getTime();
+    if(s>e){alert('开始日期不能晚于结束日期');return false;}
+    state.rangeStart=s;state.rangeEnd=e;
+  }
+  state.userPage=1;state.taskPage=1;state.catDrillPage=1;state.reportPage=1;
+  document.querySelectorAll('.tf-btn[data-range]').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-range')===key);});
+  refreshPage();
+  return true;
+}
+function prevPeriod(){var len=state.rangeEnd-state.rangeStart+1;return [state.rangeStart-len,state.rangeStart-1];}
+function inRange(t){return t.time>=state.rangeStart&&t.time<=state.rangeEnd;}
+function getFilteredTasks(){return TASKS.filter(inRange);}
+function rangeDays(){return Math.max(1,Math.round((state.rangeEnd-state.rangeStart)/DAY_MS)+1);}
+// 汇总指标：活跃用户数 / 任务总数 / 日均任务数 / 平均轮次 / 产物量 / 上传资料数
+function overallStats(tasks){
+  var us={},rounds=0,outs=0,ups=0;
+  for(var i=0;i<tasks.length;i++){var t=tasks[i];us[t.userIdx]=1;rounds+=t.rounds;outs+=t.outCount;ups+=t.upCount;}
+  return {activeUsers:Object.keys(us).length,count:tasks.length,rounds:rounds,outs:outs,ups:ups,
+    avgRounds:tasks.length?Math.round(rounds/tasks.length*100)/100:0};
+}
+// 每用户统计（当前筛选范围内）
+function userStatsMap(tasks){
+  var m={},i;
+  for(i=0;i<USERS.length;i++)m[i]={userIdx:i,tasks:0,rounds:0,outs:0,ups:0,last:0};
+  for(i=0;i<tasks.length;i++){
+    var t=tasks[i],s=m[t.userIdx];
+    s.tasks++;s.rounds+=t.rounds;s.outs+=t.outCount;s.ups+=t.upCount;
+    if(t.time>s.last)s.last=t.time;
+  }
+  return m;
+}
+function groupStats(tasks,keyFn){ // 通用分组聚合
+  var m={};
+  for(var i=0;i<tasks.length;i++){
+    var t=tasks[i],k=keyFn(t);
+    if(!m[k])m[k]={key:k,count:0,rounds:0,outs:0,ups:0,users:{}};
+    var g=m[k];g.count++;g.rounds+=t.rounds;g.outs+=t.outCount;g.ups+=t.upCount;g.users[t.userIdx]=1;
+  }
+  return m;
+}
+function groupList(m){return Object.keys(m).map(function(k){return m[k];});}
+
+/* ---------- 6. ECharts 注册与页面切换 ---------- */
+var chartStore={};
+var PAGE_CHARTS={
+  overview:['overviewTrendChart'],
+  org:['orgPieChart'],
+  users:[],
+  tasks:[],
+  category:['catPieChart','catBarChart','catAreaChart'],
+  position:['posHeatChart','bizHeatChart'],
+  prompt:['promptHistChart','kwBarChart','outputPieChart'],
+  dialogue:['roundDistChart','deptRoundChart','posRoundChart'],
+  upload:['uploadPieChart','uploadTopChart','uploadHeatChart'],
+  report:['reportChart']
+};
+function getChart(id){
+  var dom=document.getElementById(id);
+  if(!dom)return null;
+  if(typeof echarts==='undefined'){dom.innerHTML='<div class="empty-tip">图表组件（ECharts CDN）加载失败，请检查网络后刷新</div>';return null;}
+  var c=chartStore[id];
+  if(!c||c.isDisposed()||!document.body.contains(c.getDom())){if(c&&!c.isDisposed())c.dispose();c=echarts.init(dom);chartStore[id]=c;}
+  return c;
+}
+function disposeCharts(ids){ids.forEach(function(id){if(chartStore[id]&&!chartStore[id].isDisposed()){chartStore[id].dispose();}delete chartStore[id];});}
+function resizeAllCharts(){Object.keys(chartStore).forEach(function(id){try{chartStore[id].resize();}catch(e){}});}
+var PAGES=['overview','org','users','tasks','category','position','prompt','dialogue','upload','report'];
+function switchPage(page){
+  state.page=page;
+  document.querySelectorAll('.nav-item').forEach(function(n){n.classList.toggle('active',n.getAttribute('data-page')===page);});
+  document.querySelectorAll('.page').forEach(function(p){p.classList.toggle('active',p.id==='page-'+page);});
+  renderPage(page);
+  setTimeout(resizeAllCharts,30);
+}
+function refreshPage(){renderPage(state.page);}
+function renderPage(page){
+  disposeCharts(PAGE_CHARTS[page]||[]);
+  if(page==='overview')renderOverview();
+  else if(page==='org')renderOrg();
+  else if(page==='users')renderUsers();
+  else if(page==='tasks')renderTasks();
+  else if(page==='category')renderCategory();
+  else if(page==='position')renderPosition();
+  else if(page==='prompt')renderPrompt();
+  else if(page==='dialogue')renderDialogue();
+  else if(page==='upload')renderUpload();
+  else if(page==='report')renderReport();
+}
+
+/* ---------- 7. 通用导出 / 分页 / 存储 ---------- */
+function exportCSV(filename,headers,rows){
+  var escCsv=function(v){v=String(v==null?'':v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  var csv='\ufeff'+[headers.join(',')].concat(rows.map(function(r){return r.map(escCsv).join(',');})).join('\r\n');
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download=filename;
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},500);
+}
+function pagerHTML(page,total,per,fnName){
+  var pages=Math.max(1,Math.ceil(total/per));
+  if(total<=per&&page===1&&pages===1)return '<span>共 '+total+' 条</span>';
+  var h='<span>共 '+total+' 条 / 第 '+page+' / '+pages+' 页</span>';
+  h+='<button '+(page<=1?'disabled':'')+' onclick="'+fnName+'(1)">«</button>';
+  h+='<button '+(page<=1?'disabled':'')+' onclick="'+fnName+'('+(page-1)+')">上一页</button>';
+  h+='<button '+(page>=pages?'disabled':'')+' onclick="'+fnName+'('+(page+1)+')">下一页</button>';
+  h+='<button '+(page>=pages?'disabled':'')+' onclick="'+fnName+'('+pages+')">»</button>';
+  return h;
+}
+function lsGet(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+function taskRowCSV(t){return [t.id,t.title,USERS[t.userIdx].name,USERS[t.userIdx].dept,USERS[t.userIdx].sub,t.category,USERS[t.userIdx].position,USERS[t.userIdx].biz,t.rounds,t.outCount,t.upCount,fmtDT(t.time),t.status];}
+var TASK_CSV_HEAD=['任务ID','标题','用户','部门','二级部门','任务类别','岗位','业务线','对话轮次','产物数','上传资料数','时间','状态'];
+var CHART_COLORS=['#2563eb','#0891b2','#059669','#d97706','#7c3aed','#db2777','#65a30d','#0e7490','#a16207','#475569','#334155','#6366f1'];
+var AXIS_STYLE={axisLine:{lineStyle:{color:'#cbd5e1'}},axisLabel:{color:'#64748b'},splitLine:{lineStyle:{color:'#f1f5f9'}}};
+function baseTooltip(){return {trigger:'axis',backgroundColor:'#fff',borderColor:'#e2e8f0',textStyle:{color:'#1e293b'}};}
+function statusBadge(s){var c=s==='已完成'?'var(--up)':(s==='进行中'?'var(--primary)':'var(--text-sub)');return '<span class="tag" style="color:'+c+'">'+s+'</span>';}
+
+/* ---------- 8. 页面一：总览看板 ---------- */
+function trendBuckets(tasks){
+  var m={};
+  for(var i=0;i<tasks.length;i++){
+    var t=tasks[i];
+    var k=state.granularity==='day'?t.day:(state.granularity==='week'?weekKey(t.time):monthKey(t.time));
+    if(!m[k])m[k]={key:k,count:0,users:{}};
+    m[k].count++;m[k].users[t.userIdx]=1;
+  }
+  return Object.keys(m).sort().map(function(k){return {key:k,count:m[k].count,active:Object.keys(m[k].users).length};});
+}
+function statCardHTML(label,value,prev,unit){
+  var d=prev>0?pct(value,prev):null;
+  var cls=d===null?'flat':(d>=0?'up':'down');
+  var dHtml=d===null?'<span class="muted">上一周期无数据</span>'
+    :'<span class="'+cls+'">'+(d>=0?'▲':'▼')+' '+Math.abs(d)+'%</span><span class="muted">较上一周期</span>';
+  return '<div class="card stat-card"><div class="label">'+label+'</div><div class="value">'+fmtNum(value)+'<span style="font-size:12px;color:#64748b;font-weight:400"> '+(unit||'')+'</span></div><div class="delta">'+dHtml+'</div></div>';
+}
+function renderOverview(){
+  var tasks=getFilteredTasks();
+  var cur=overallStats(tasks);
+  var pp=prevPeriod(),prevTasks=TASKS.filter(function(t){return t.time>=pp[0]&&t.time<=pp[1];});
+  var prev=overallStats(prevTasks);
+  var dailyAvg=Math.round(cur.count/rangeDays()*10)/10,prevDaily=Math.round(prev.count/rangeDays()*10)/10;
+  document.getElementById('overviewStats').innerHTML=
+    statCardHTML('活跃用户数',cur.activeUsers,prev.activeUsers,'人')+
+    statCardHTML('任务总数',cur.count,prev.count,'个')+
+    statCardHTML('日均任务数',dailyAvg,prevDaily,'个/天')+
+    statCardHTML('平均对话轮次',cur.avgRounds,prev.avgRounds,'轮')+
+    statCardHTML('产物生成量',cur.outs,prev.outs,'个')+
+    statCardHTML('上传资料数',cur.ups,prev.ups,'份');
+  // 趋势双轴图
+  var buckets=trendBuckets(tasks);
+  document.getElementById('overviewTrendSub').textContent='（'+{today:'今天',week:'本周',month:'本月','90d':'近90天',custom:'自定义'}[state.rangeKey]+' · 按'+({day:'天',week:'周',month:'月'}[state.granularity])+'聚合）';
+  var c=getChart('overviewTrendChart');
+  if(c){
+    c.setOption({
+      color:['#2563eb','#0891b2'],
+      tooltip:baseTooltip(),
+      legend:{data:['任务量','活跃用户'],top:0,textStyle:{color:'#475569'}},
+      grid:{left:50,right:50,top:36,bottom:56},
+      xAxis:{type:'category',data:buckets.map(function(b){return b.key;}),boundaryGap:false,axisTick:{show:false},axisLabel:{color:'#64748b',hideOverlap:true,interval:'auto'},axisLine:{lineStyle:{color:'#e2e8f0'}}},
+      yAxis:[{type:'value',name:'任务量',nameTextStyle:{color:'#94a3b8'},axisLabel:{color:'#64748b'},splitLine:{lineStyle:{color:'#f1f5f9'}}},
+             {type:'value',name:'活跃用户',nameTextStyle:{color:'#94a3b8'},axisLabel:{color:'#64748b'},splitLine:{show:false}}],
+      dataZoom:buckets.length>30?[{type:'slider',height:18,bottom:12}]:[],
+      series:[
+        {name:'任务量',type:'line',smooth:true,symbol:'none',data:buckets.map(function(b){return b.count;}),areaStyle:{opacity:.12},lineStyle:{width:2}},
+        {name:'活跃用户',type:'line',smooth:true,symbol:'none',yAxisIndex:1,data:buckets.map(function(b){return b.active;}),lineStyle:{width:2,type:'dashed'}}
+      ]
+    },true);
+  }
+  // 排行榜
+  var deptG=groupStats(tasks,function(t){return USERS[t.userIdx].dept;});
+  var userS=userStatsMap(tasks);
+  var catG=groupStats(tasks,function(t){return t.category;});
+  var rank=function(list,fmt){
+    return list.map(function(x,i){
+      return '<li><span class="rank-no r'+(i+1)+'">'+(i+1)+'</span><span class="name">'+fmt(x)+'</span><span class="val">'+fmtNum(x.count)+'</span></li>';
+    }).join('');
+  };
+  document.getElementById('rankDept').innerHTML=rank(groupList(deptG).sort(function(a,b){return b.count-a.count;}).slice(0,5),function(x){return esc(x.key);});
+  document.getElementById('rankUser').innerHTML=rank(groupList(userS).filter(function(x){return x.tasks>0;}).sort(function(a,b){return b.tasks-a.tasks;}).slice(0,10).map(function(x){return {key:USERS[x.userIdx].name+'（'+USERS[x.userIdx].dept+'）',count:x.tasks};}),function(x){return esc(x.key);});
+  document.getElementById('rankCat').innerHTML=rank(groupList(catG).sort(function(a,b){return b.count-a.count;}).slice(0,5),function(x){return esc(x.key);});
+}
+
+/* ---------- 9. 页面二：组织架构视图 ---------- */
+var orgExpand=(function(){var v=lsGet('wb_org_expand',['root']);return Array.isArray(v)?v:['root'];})(); // 类型校验：非数组回退默认值
+function saveOrgExpand(){lsSet('wb_org_expand',orgExpand);}
+function nodeUsers(nodeId){
+  if(nodeId==='root')return USERS.map(function(u,i){return i;});
+  if(nodeId[0]==='d'){
+    var di=parseInt(nodeId.slice(1).split('s')[0],10),rest=nodeId.slice(1).split('s');
+    if(rest.length===1)return USERS.map(function(u,i){return u.dept===DEPTS[di].name?i:-1;}).filter(function(i){return i>-1;});
+    var si=parseInt(rest[1],10);
+    return USERS.map(function(u,i){return (u.dept===DEPTS[di].name&&u.sub===DEPTS[di].subs[si].name)?i:-1;}).filter(function(i){return i>-1;});
+  }
+  if(nodeId[0]==='u')return [parseInt(nodeId.slice(1),10)];
+  return [];
+}
+function nodeName(nodeId){
+  if(nodeId==='root')return 'WorkBuddy（全员）';
+  if(nodeId[0]==='u')return USERS[parseInt(nodeId.slice(1),10)].name;
+  var parts=nodeId.slice(1).split('s');
+  if(parts.length===1)return DEPTS[parseInt(parts[0],10)].name;
+  return DEPTS[parseInt(parts[0],10)].subs[parseInt(parts[1],10)].name;
+}
+function childNodes(nodeId){
+  if(nodeId==='root')return DEPTS.map(function(d,i){return 'd'+i;});
+  if(nodeId[0]==='d'){
+    var parts=nodeId.slice(1).split('s');
+    if(parts.length===1)return DEPTS[parseInt(parts[0],10)].subs.map(function(s,j){return 'd'+parts[0]+'s'+j;});
+    return nodeUsers(nodeId).map(function(i){return 'u'+i;});
+  }
+  return [];
+}
+function nodeStats(nodeId){
+  var users=nodeUsers(nodeId),m={tasks:0,rounds:0,outs:0,ups:0};
+  for(var i=0;i<users.length;i++){
+    var list=TASKS_BY_USER[users[i]];
+    for(var j=0;j<list.length;j++){
+      var t=list[j];
+      if(inRange(t)){m.tasks++;m.rounds+=t.rounds;m.outs+=t.outCount;m.ups+=t.upCount;}
+    }
+  }
+  m.users=users.length;
+  m.avgRounds=m.tasks?Math.round(m.rounds/m.tasks*100)/100:0;
+  return m;
+}
+function renderOrgTree(){
+  var expanded={};orgExpand.forEach(function(id){expanded[id]=1;});
+  function nodeHTML(id,depth){
+    var kids=childNodes(id);
+    var isLeaf=kids.length===0;
+    var open=!!expanded[id];
+    var sel=state.orgSelected===id;
+    var h='<div class="tree-node'+(open?' open':'')+'" data-id="'+id+'">';
+    h+='<div class="row'+(sel?' selected':'')+'" style="padding-left:'+(depth*10)+'px">';
+    h+='<span class="tree-toggle'+(isLeaf?' leaf':'')+(open?' open':'')+'" onclick="toggleOrgNode(\''+id+'\')">'+(isLeaf?'▸':'▸')+'</span>';
+    h+='<span onclick="selectOrgNode(\''+id+'\')">'+esc(nodeName(id))+'</span></div>';
+    if(!isLeaf&&open)h+='<div class="tree-children">'+kids.map(function(k){return nodeHTML(k,depth+1);}).join('')+'</div>';
+    h+='</div>';
+    return h;
+  }
+  document.getElementById('orgTree').innerHTML=nodeHTML('root',0);
+}
+function toggleOrgNode(id){
+  var i=orgExpand.indexOf(id);
+  if(i>-1)orgExpand.splice(i,1);else orgExpand.push(id);
+  saveOrgExpand();renderOrgTree();
+}
+function selectOrgNode(id){state.orgSelected=id;renderOrgTree();renderOrgRight();if(state.orgMode==='task'){orgTaskPage=1;renderOrgTaskTable();}}
+function setOrgMode(m){
+  state.orgMode=m;
+  document.querySelectorAll('#orgModeTabs .tab').forEach(function(t){t.classList.toggle('active',t.getAttribute('data-mode')===m);});
+  var sel=document.getElementById('orgSortSel'),pager=document.getElementById('orgTaskPager');
+  if(m==='task'){sel.style.display='none';renderOrgRight();renderOrgTaskTable();}
+  else{sel.style.display='';if(pager)pager.remove();renderOrgRight();}
+}
+function renderOrg(){
+  renderOrgTree();
+  document.querySelectorAll('#orgModeTabs .tab').forEach(function(t){t.classList.toggle('active',t.getAttribute('data-mode')===state.orgMode);});
+  document.getElementById('orgSortSel').value=state.orgSort;
+  renderOrgRight();
+  if(state.orgMode==='task')renderOrgTaskTable();
+}
+function renderOrgRight(){
+  var nodeId=state.orgSelected;
+  var st=nodeStats(nodeId);
+  document.getElementById('orgPanelTitle').textContent=nodeName(nodeId)+' · 层级汇总（'+({today:'今天',week:'本周',month:'本月','90d':'近90天',custom:'自定义'}[state.rangeKey])+'）';
+  document.getElementById('orgSummary').innerHTML=
+    '<div class="kv"><div class="k">成员数</div><div class="v">'+st.users+'</div></div>'+
+    '<div class="kv"><div class="k">任务数</div><div class="v">'+fmtNum(st.tasks)+'</div></div>'+
+    '<div class="kv"><div class="k">人均任务</div><div class="v">'+fmtNum(st.users?Math.round(st.tasks/st.users*10)/10:0)+'</div></div>'+
+    '<div class="kv"><div class="k">平均轮次</div><div class="v">'+st.avgRounds+'</div></div>'+
+    '<div class="kv"><div class="k">产物数</div><div class="v">'+fmtNum(st.outs)+'</div></div>'+
+    '<div class="kv"><div class="k">上传资料</div><div class="v">'+fmtNum(st.ups)+'</div></div>';
+  var mode=state.orgMode;
+  var memberCard=document.getElementById('orgMemberCard'),pieCard=document.getElementById('orgPieCard');
+  var tbl=document.getElementById('orgMemberTable');
+  memberCard.style.display=(mode==='task')?'none':'block';
+  document.getElementById('orgMemberTitle').textContent=(mode==='user')?'下级成员（按用户）':'下级成员（按组织架构）';
+  if(mode==='org'){
+    var kids=childNodes(nodeId);
+    var rows=kids.map(function(k){var s=nodeStats(k);return {id:k,name:nodeName(k),tasks:s.tasks,rounds:s.rounds,outs:s.outs,leaf:k[0]==='u'};});
+    rows.sort(function(a,b){return (b[state.orgSort]-a[state.orgSort])||0;});
+    tbl.innerHTML='<thead><tr><th>名称</th><th>任务数</th><th>对话轮次</th><th>产物数</th></tr></thead><tbody>'+
+      rows.map(function(r){return '<tr class="data-row" onclick="selectOrgNode(\''+r.id+'\')"><td>'+esc(r.name)+(r.leaf?' <span class="muted">（个人）</span>':'')+'</td><td>'+fmtNum(r.tasks)+'</td><td>'+fmtNum(r.rounds)+'</td><td>'+fmtNum(r.outs)+'</td></tr>';}).join('')+'</tbody>';
+  }else if(mode==='user'){
+    var users=nodeUsers(nodeId);
+    var um=userStatsMap(getFilteredTasks());
+    var rowsU=users.map(function(i){var s=um[i];return {id:i,name:USERS[i].name,empId:USERS[i].empId,dept:USERS[i].dept+' / '+USERS[i].sub,pos:USERS[i].position,tasks:s.tasks,rounds:s.rounds,outs:s.outs};});
+    rowsU.sort(function(a,b){return (b[state.orgSort]-a[state.orgSort])||0;});
+    tbl.innerHTML='<thead><tr><th>姓名</th><th>工号</th><th>部门</th><th>岗位</th><th>任务数</th><th>对话轮次</th><th>产物数</th></tr></thead><tbody>'+
+      rowsU.map(function(r){return '<tr class="data-row" onclick="selectOrgNode(\'u'+r.id+'\')"><td>'+esc(r.name)+'</td><td>'+r.empId+'</td><td>'+esc(r.dept)+'</td><td>'+esc(r.pos)+'</td><td>'+fmtNum(r.tasks)+'</td><td>'+fmtNum(r.rounds)+'</td><td>'+fmtNum(r.outs)+'</td></tr>';}).join('')+'</tbody>';
+  }else{
+    memberCard.style.display='none';
+  }
+  // 类别分布饼图
+  var users2=nodeUsers(nodeId),catM={};
+  users2.forEach(function(i){TASKS_BY_USER[i].forEach(function(t){if(inRange(t))catM[t.category]=(catM[t.category]||0)+1;});});
+  var pie=getChart('orgPieChart');
+  if(pie){
+    pie.setOption({
+      color:CHART_COLORS,
+      tooltip:{trigger:'item',backgroundColor:'#fff',borderColor:'#e2e8f0',textStyle:{color:'#1e293b'}},
+      legend:{orient:'vertical',right:0,top:'middle',textStyle:{color:'#475569',fontSize:11}},
+      series:[{type:'pie',radius:['38%','65%'],center:['40%','50%'],
+        label:{formatter:'{b}: {d}%',color:'#64748b'},
+        data:Object.keys(catM).map(function(k){return {name:k,value:catM[k]};}).sort(function(a,b){return b.value-a.value;})}]
+    },true);
+  }
+}
+// 按任务详情模式：当前节点任务列表（分页）
+var orgTaskPage=1;
+function goOrgTaskPage(p){orgTaskPage=p;renderOrgTaskTable();}
+function renderOrgTaskTable(){
+  var memberCard=document.getElementById('orgMemberCard');
+  memberCard.style.display='block';
+  document.getElementById('orgMemberTitle').textContent='该层级任务列表';
+  var users=nodeUsers(state.orgSelected);
+  var list=[];
+  users.forEach(function(i){TASKS_BY_USER[i].forEach(function(t){if(inRange(t))list.push(t);});});
+  list.sort(function(a,b){return b.time-a.time;});
+  var per=15,pages=Math.max(1,Math.ceil(list.length/per));
+  if(orgTaskPage>pages)orgTaskPage=pages;
+  var slice=list.slice((orgTaskPage-1)*per,orgTaskPage*per);
+  var tbl=document.getElementById('orgMemberTable');
+  tbl.innerHTML='<thead><tr><th>任务ID</th><th>标题</th><th>用户</th><th>类别</th><th>轮次</th><th>产物</th><th>时间</th><th>状态</th></tr></thead><tbody>'+
+    slice.map(function(t){return '<tr><td>'+t.id+'</td><td>'+esc(t.title)+'</td><td>'+esc(USERS[t.userIdx].name)+'</td><td>'+t.category+'</td><td>'+t.rounds+'</td><td>'+t.outCount+'</td><td>'+fmtDT(t.time)+'</td><td>'+statusBadge(t.status)+'</td></tr>';}).join('')+
+    '</tbody>';
+  document.getElementById('orgSortSel').style.display='none';
+  var pager=document.getElementById('orgTaskPager');
+  if(!pager){pager=document.createElement('div');pager.className='pager';pager.id='orgTaskPager';memberCard.appendChild(pager);}
+  pager.innerHTML=pagerHTML(orgTaskPage,list.length,per,'goOrgTaskPage')+
+    '<button class="btn btn-ghost" style="margin-left:auto" onclick="exportOrgTasks()">导出 CSV</button>';
+}
+function exportOrgTasks(){
+  var users=nodeUsers(state.orgSelected),rows=[];
+  users.forEach(function(i){TASKS_BY_USER[i].forEach(function(t){if(inRange(t))rows.push(taskRowCSV(t));});});
+  exportCSV('组织任务明细.csv',TASK_CSV_HEAD,rows);
+}
+
+/* ---------- 10. 页面三：用户明细 ---------- */
+var USER_PER_PAGE=15;
+function filteredUsers(){
+  var um=userStatsMap(getFilteredTasks()),q=state.userQuery.trim().toLowerCase();
+  var rows=[];
+  for(var i=0;i<USERS.length;i++){
+    var u=USERS[i],s=um[i];
+    var row={userIdx:i,name:u.name,empId:u.empId,dept:u.dept+' / '+u.sub,position:u.position,biz:u.biz,
+      tasks:s.tasks,rounds:s.rounds,outputs:s.outs,uploads:s.ups,lastActive:s.last};
+    if(q&&!(u.name.toLowerCase().indexOf(q)>-1||u.empId.toLowerCase().indexOf(q)>-1||u.dept.toLowerCase().indexOf(q)>-1||u.position.toLowerCase().indexOf(q)>-1||u.sub.toLowerCase().indexOf(q)>-1))continue;
+    rows.push(row);
+  }
+  var k=state.userSortKey,d=state.userSortDir;
+  rows.sort(function(a,b){
+    var va=a[k],vb=b[k];
+    if(typeof va==='string')return va.localeCompare(vb,'zh')*d;
+    return (va-vb)*d;
+  });
+  return rows;
+}
+function goUsersPage(p){state.userPage=p;renderUsersTable(filteredUsers());}
+function sortUsers(key){
+  if(state.userSortKey===key)state.userSortDir*=-1;else{state.userSortKey=key;state.userSortDir=(key==='tasks'||key==='rounds'||key==='outputs'||key==='uploads'||key==='lastActive')?-1:1;}
+  state.userPage=1;renderUsersTable(filteredUsers());
+}
+function userSearch(){state.userQuery=document.getElementById('userSearchInput').value;state.userPage=1;renderUsersTable(filteredUsers());}
+function toggleUserRow(userIdx){
+  if(state.userOpen===userIdx)state.userOpen=-1;else state.userOpen=userIdx;
+  renderUsersTable(filteredUsers());
+}
+function renderUsers(){renderUsersTable(filteredUsers());}
+function renderUsersTable(rows){
+  document.getElementById('userCount').textContent=rows.length;
+  // 表头排序指示
+  document.querySelectorAll('#userTable th.sortable').forEach(function(th){
+    var k=th.getAttribute('data-key');
+    th.innerHTML=th.textContent.replace(/[▲▼]/g,'')+(state.userSortKey===k?(state.userSortDir===1?'<span class="arr">▲</span>':'<span class="arr">▼</span>'):'');
+  });
+  var total=rows.length,pages=Math.max(1,Math.ceil(total/USER_PER_PAGE));
+  if(state.userPage>pages)state.userPage=pages;
+  var slice=rows.slice((state.userPage-1)*USER_PER_PAGE,state.userPage*USER_PER_PAGE);
+  var html='',i;
+  for(i=0;i<slice.length;i++){
+    var r=slice[i];
+    html+='<tr class="data-row" onclick="toggleUserRow('+r.userIdx+')">'+
+      '<td><b>'+esc(r.name)+'</b></td><td>'+r.empId+'</td><td>'+esc(r.dept)+'</td><td>'+esc(r.position)+'</td><td>'+esc(r.biz)+'</td>'+
+      '<td>'+fmtNum(r.tasks)+'</td><td>'+fmtNum(r.rounds)+'</td><td>'+fmtNum(r.outputs)+'</td><td>'+fmtNum(r.uploads)+'</td>'+
+      '<td>'+(r.lastActive?fmtDT(r.lastActive):'<span class="muted">—</span>')+'</td></tr>';
+    if(state.userOpen===r.userIdx)html+=userDetailHTML(r.userIdx);
+  }
+  document.getElementById('userTbody').innerHTML=html;
+  document.getElementById('userPager').innerHTML=pagerHTML(state.userPage,total,USER_PER_PAGE,'goUsersPage')+
+    '<button class="btn btn-ghost" style="margin-left:auto" onclick="exportUsers()">导出 CSV</button>';
+  // 展开行内的两张小图
+  if(state.userOpen>-1){
+    var uidx=state.userOpen,mine=TASKS_BY_USER[uidx].filter(inRange);
+    var catM={},dayM={};
+    mine.forEach(function(t){catM[t.category]=(catM[t.category]||0)+1;dayM[t.day]=(dayM[t.day]||0)+1;});
+    var days=Object.keys(dayM).sort();
+    var pie=getChart('uCat'+uidx);
+    if(pie)pie.setOption({color:CHART_COLORS,tooltip:{trigger:'item'},
+      series:[{type:'pie',radius:['32%','62%'],label:{formatter:'{b}\n{d}%',fontSize:10,color:'#64748b'},
+        data:Object.keys(catM).map(function(k){return {name:k,value:catM[k]};})}]},true);
+    var line=getChart('uTrend'+uidx);
+    if(line)line.setOption({color:['#2563eb'],tooltip:baseTooltip(),grid:{left:36,right:12,top:24,bottom:24},
+      xAxis:{type:'category',data:days,axisLabel:{color:'#64748b',rotate:days.length>10?45:0},axisLine:{lineStyle:{color:'#e2e8f0'}}},
+      yAxis:{type:'value',axisLabel:{color:'#64748b'},splitLine:{lineStyle:{color:'#f1f5f9'}}},
+      series:[{type:'line',smooth:true,areaStyle:{opacity:.15},data:days.map(function(d){return dayM[d];})}]},true);
+  }
+  setTimeout(resizeAllCharts,30);
+}
+function userDetailHTML(userIdx){
+  var u=USERS[userIdx],mine=TASKS_BY_USER[userIdx].filter(inRange).sort(function(a,b){return b.time-a.time;});
+  var recent=mine.slice(0,10);
+  return '<tr class="detail-row"><td colspan="10">'+
+    '<div style="display:grid;grid-template-columns:280px 1fr;gap:16px">'+
+    '<div><div class="card-title" style="font-size:13px">任务类别分布</div><div id="uCat'+userIdx+'" style="height:200px"></div></div>'+
+    '<div><div class="card-title" style="font-size:13px">任务时间趋势</div><div id="uTrend'+userIdx+'" style="height:200px"></div></div>'+
+    '</div>'+
+    '<div class="card-title" style="font-size:13px;margin-top:12px">任务列表（最近 '+recent.length+' 条）</div>'+
+    '<div class="tbl-scroll" style="max-height:220px"><table class="tbl"><thead><tr><th>任务ID</th><th>标题</th><th>类别</th><th>轮次</th><th>时间</th><th>状态</th></tr></thead><tbody>'+
+    recent.map(function(t){return '<tr><td>'+t.id+'</td><td>'+esc(t.title)+'</td><td>'+t.category+'</td><td>'+t.rounds+'</td><td>'+fmtDT(t.time)+'</td><td>'+statusBadge(t.status)+'</td></tr>';}).join('')+
+    '</tbody></table></div></td></tr>';
+}
+function exportUsers(){
+  var rows=filteredUsers().map(function(r){return [r.name,r.empId,r.dept,r.position,r.biz,r.tasks,r.rounds,r.outputs,r.uploads,r.lastActive?fmtDT(r.lastActive):''];});
+  exportCSV('用户明细.csv',['姓名','工号','部门','岗位','业务分类','任务数','对话轮次','产物数','上传资料数','最近活跃时间'],rows);
+}
+
+/* ---------- 11. 页面四：任务明细 ---------- */
+var TASK_PER_PAGE=15;
+function filteredTasksList(){
+  var f=state.taskFilters;
+  return TASKS.filter(function(t){
+    if(!inRange(t))return false;
+    var u=USERS[t.userIdx];
+    if(f.dept&&u.dept!==f.dept)return false;
+    if(f.user&&u.empId!==f.user)return false;
+    if(f.cat&&t.category!==f.cat)return false;
+    if(f.pos&&u.position!==f.pos)return false;
+    if(f.biz&&u.biz!==f.biz)return false;
+    return true;
+  }).sort(function(a,b){return b.time-a.time;});
+}
+function goTasksPage(p){state.taskPage=p;renderTasksTable(filteredTasksList());}
+function onTaskFilter(key,sel){
+  state.taskFilters[key]=sel.value;state.taskPage=1;state.taskOpen='';
+  renderTasksTable(filteredTasksList());
+}
+function toggleTaskRow(taskId){
+  state.taskOpen=(state.taskOpen===taskId)?'':taskId;
+  renderTasksTable(filteredTasksList());
+}
+function fillSelect(id,items,all){
+  var sel=document.getElementById(id),cur=sel.value;
+  sel.innerHTML='<option value="">'+all+'</option>'+items.map(function(x){return '<option value="'+esc(x)+'">'+esc(x)+'</option>';}).join('');
+  sel.value=cur;
+}
+function renderTasks(){
+  var f=state.taskFilters;
+  fillSelect('taskFDept',DEPTS.map(function(d){return d.name;}),'全部部门');document.getElementById('taskFDept').value=f.dept;
+  // 用户筛选：value 为工号
+  document.getElementById('taskFUser').innerHTML='<option value="">全部用户</option>'+
+    USERS.map(function(u){return '<option value="'+u.empId+'">'+u.empId+' '+esc(u.name)+'</option>';}).join('');
+  document.getElementById('taskFUser').value=f.user;
+  fillSelect('taskFCat',CATS,'全部类别');document.getElementById('taskFCat').value=f.cat;
+  fillSelect('taskFPos',POSITIONS,'全部岗位');document.getElementById('taskFPos').value=f.pos;
+  fillSelect('taskFBiz',BIZS,'全部业务线');document.getElementById('taskFBiz').value=f.biz;
+  renderTasksTable(filteredTasksList());
+}
+function taskDetailHTML(t){
+  var u=USERS[t.userIdx];
+  var dlgs=dialogOf(t),rounds=[];
+  for(var i=0;i<dlgs.length;i+=2){
+    var uu=dlgs[i],aa=dlgs[i+1]||{text:''};
+    rounds.push('<div class="dlg-round'+(i===0?' open':'')+'"><div class="rh" onclick="this.parentNode.classList.toggle(\'open\')"><span>第 '+((i/2|0)+1)+' 轮</span><span class="muted">'+esc(uu.text.slice(0,18))+'…</span></div>'+
+      '<div class="rb"><div class="u">用户：</div><div style="margin-bottom:6px">'+esc(uu.text)+'</div><div class="a">AI：</div><div>'+esc(aa.text)+'</div></div></div>');
+  }
+  return '<tr class="detail-row"><td colspan="11">'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+
+    '<div><div class="card-title" style="font-size:13px">提示词全文 <span class="tag">'+t.promptLen+' 字</span></div>'+
+    '<div style="font-size:12px;line-height:1.8;background:#fbfdff;border:1px solid #e2e8f0;border-radius:6px;padding:10px">'+esc(t.prompt)+'</div>'+
+    '<div class="card-title" style="font-size:13px;margin-top:12px">产物列表</div>'+
+    (t.outputs.length?t.outputs.map(function(o){return '<div class="muted">📎 <a href="javascript:void(0)" style="color:#2563eb">'+esc(o.type)+' · '+esc(o.name)+'</a></div>';}).join(''):'<span class="muted">无产物</span>')+
+    '<div class="card-title" style="font-size:13px;margin-top:12px">上传资料</div>'+
+    (t.uploads.length?t.uploads.map(function(o){return '<div class="muted">🗂 '+esc(o.type)+' · '+esc(o.name)+'</div>';}).join(''):'<span class="muted">无上传</span>')+'</div>'+
+    '<div><div class="card-title" style="font-size:13px">多轮对话记录（'+t.rounds+' 轮）</div><div class="dlg-box">'+rounds.join('')+'</div></div>'+
+    '</div></td></tr>';
+}
+function renderTasksTable(list){
+  var total=list.length,pages=Math.max(1,Math.ceil(total/TASK_PER_PAGE));
+  if(state.taskPage>pages)state.taskPage=pages;
+  var slice=list.slice((state.taskPage-1)*TASK_PER_PAGE,state.taskPage*TASK_PER_PAGE);
+  var html='',i;
+  for(i=0;i<slice.length;i++){
+    var t=slice[i],u=USERS[t.userIdx];
+    html+='<tr class="data-row" onclick="toggleTaskRow(\''+t.id+'\')">'+
+      '<td>'+t.id+'</td><td>'+esc(t.title)+'</td><td>'+esc(u.name)+'</td><td>'+esc(u.dept)+'</td><td>'+t.category+'</td>'+
+      '<td>'+esc(u.position)+'</td><td>'+esc(u.biz)+'</td><td>'+t.rounds+'</td><td>'+t.outCount+'</td><td>'+fmtDT(t.time)+'</td><td>'+statusBadge(t.status)+'</td></tr>';
+    if(state.taskOpen===t.id)html+=taskDetailHTML(t);
+  }
+  document.getElementById('taskTbody').innerHTML=html;
+  document.getElementById('taskPager').innerHTML=pagerHTML(state.taskPage,total,TASK_PER_PAGE,'goTasksPage');
+}
+function exportTasks(){
+  var rows=filteredTasksList().map(taskRowCSV);
+  exportCSV('任务明细.csv',TASK_CSV_HEAD,rows);
+}
+
+/* ---------- 12. 页面五：任务分类分析 ---------- */
+function catCounts(tasks){var m={};tasks.forEach(function(t){m[t.category]=(m[t.category]||0)+1;});return m;}
+function heatOption(rows,cols,mat,maxV){
+  var data=[];
+  for(var y=0;y<rows.length;y++)for(var x=0;x<cols.length;x++)data.push([x,y,mat[y][x]||0]);
+  return {
+    tooltip:{position:'top',backgroundColor:'#fff',borderColor:'#e2e8f0',textStyle:{color:'#1e293b'},
+      formatter:function(p){return esc(rows[p.value[1]])+' × '+esc(cols[p.value[0]])+'<br/>任务数：<b>'+p.value[2]+'</b>';}},
+    grid:{left:90,right:20,top:10,bottom:78},
+    xAxis:{type:'category',data:cols,axisLabel:{color:'#64748b',rotate:cols.length>7?30:0},splitArea:{show:true,areaStyle:{color:['#fafcff','#f4f7fb']}}},
+    yAxis:{type:'category',data:rows,axisLabel:{color:'#475569'},splitArea:{show:true,areaStyle:{color:['#fafcff','#f4f7fb']}}},
+    visualMap:{min:0,max:maxV||1,calculable:true,orient:'horizontal',left:'center',bottom:0,
+      inRange:{color:['#eff6ff','#bfdbfe','#60a5fa','#2563eb','#1e3a8a']},textStyle:{color:'#64748b'}},
+    series:[{type:'heatmap',data:data,label:{show:false},
+      itemStyle:{borderColor:'#fff',borderWidth:2,emphasis:{shadowBlur:6,shadowColor:'rgba(0,0,0,.2)'}}}]
+  };
+}
+function openCatDrill(cat){state.catDrill=cat;state.catDrillPage=1;renderCatDrill();}
+function closeCatDrill(){state.catDrill=null;document.getElementById('catDrillCard').style.display='none';}
+function goCatDrillPage(p){state.catDrillPage=p;renderCatDrill();}
+function exportCatDrill(){
+  if(!state.catDrill)return;
+  var rows=TASKS.filter(function(t){return inRange(t)&&t.category===state.catDrill;}).map(taskRowCSV);
+  exportCSV('分类任务明细_'+state.catDrill+'.csv',TASK_CSV_HEAD,rows);
+}
+function renderCatDrill(){
+  var card=document.getElementById('catDrillCard');
+  if(!state.catDrill){card.style.display='none';return;}
+  card.style.display='block';
+  document.getElementById('catDrillTitle').textContent='「'+state.catDrill+'」任务明细（点击图表图例/柱子下钻）';
+  var list=TASKS.filter(function(t){return inRange(t)&&t.category===state.catDrill;}).sort(function(a,b){return b.time-a.time;});
+  var per=10,pages=Math.max(1,Math.ceil(list.length/per));
+  if(state.catDrillPage>pages)state.catDrillPage=pages;
+  var slice=list.slice((state.catDrillPage-1)*per,state.catDrillPage*per);
+  document.getElementById('catDrillTable').innerHTML='<thead><tr><th>任务ID</th><th>标题</th><th>用户</th><th>部门</th><th>轮次</th><th>产物</th><th>时间</th><th>状态</th></tr></thead><tbody>'+
+    slice.map(function(t){var u=USERS[t.userIdx];return '<tr><td>'+t.id+'</td><td>'+esc(t.title)+'</td><td>'+esc(u.name)+'</td><td>'+esc(u.dept)+'</td><td>'+t.rounds+'</td><td>'+t.outCount+'</td><td>'+fmtDT(t.time)+'</td><td>'+statusBadge(t.status)+'</td></tr>';}).join('')+'</tbody>';
+  document.getElementById('catDrillPager').innerHTML=pagerHTML(state.catDrillPage,list.length,per,'goCatDrillPage')+
+    '<button class="btn btn-ghost" style="margin-left:auto" onclick="exportCatDrill()">导出 CSV</button>';
+}
+function renderCategory(){
+  var tasks=getFilteredTasks();
+  var m=catCounts(tasks);
+  var cats=Object.keys(m).sort(function(a,b){return m[b]-m[a];});
+  var pie=getChart('catPieChart');
+  if(pie){
+    pie.setOption({color:CHART_COLORS,
+      tooltip:{trigger:'item',formatter:'{b}<br/>任务数：{c}（{d}%）'},
+      legend:{orient:'vertical',right:4,top:'middle',textStyle:{color:'#475569',fontSize:11},selectedMode:false},
+      series:[{type:'pie',radius:['36%','64%'],center:['38%','50%'],
+        label:{show:true,formatter:'{d}%',color:'#64748b',fontSize:11},
+        selectedMode:'single',
+        data:cats.map(function(c){return {name:c,value:m[c]};})}]},true);
+    pie.off('click');pie.on('click',function(p){if(p.name)openCatDrill(p.name);});
+  }
+  var bar=getChart('catBarChart');
+  if(bar){
+    bar.setOption({color:['#2563eb'],tooltip:{trigger:'axis',backgroundColor:'#fff',borderColor:'#e2e8f0'},
+      grid:{left:44,right:16,top:24,bottom:44},
+      xAxis:{type:'category',data:cats,axisLabel:{color:'#64748b',rotate:cats.length>6?24:0},axisLine:{lineStyle:{color:'#e2e8f0'}}},
+      yAxis:{type:'value',axisLabel:{color:'#64748b'},splitLine:{lineStyle:{color:'#f1f5f9'}}},
+      series:[{type:'bar',barMaxWidth:36,data:cats.map(function(c){return m[c];}),
+        itemStyle:{borderRadius:[4,4,0,0]},label:{show:true,position:'top',color:'#64748b',fontSize:10}}]},true);
+    bar.off('click');bar.on('click',function(p){openCatDrill(p.name);});
+  }
+  // 堆叠面积图：按天（跨度大时按周）
+  var useWeek=(state.rangeEnd-state.rangeStart)/DAY_MS>100;
+  var keys={},seriesData={},i,j;
+  tasks.forEach(function(t){
+    var k=useWeek?weekKey(t.time):t.day;
+    keys[k]=1;
+    if(!seriesData[t.category])seriesData[t.category]={};
+    seriesData[t.category][k]=(seriesData[t.category][k]||0)+1;
+  });
+  var ks=Object.keys(keys).sort();
+  var area=getChart('catAreaChart');
+  if(area){
+    area.setOption({color:CHART_COLORS,
+      tooltip:{trigger:'axis',backgroundColor:'#fff',borderColor:'#e2e8f0'},
+      legend:{top:0,textStyle:{color:'#475569'},type:'scroll',selectedMode:false},
+      grid:{left:44,right:16,top:32,bottom:ks.length>24?60:30},
+      xAxis:{type:'category',boundaryGap:false,data:ks,axisLabel:{color:'#64748b',hideOverlap:true,interval:'auto'},axisLine:{lineStyle:{color:'#e2e8f0'}}},
+      yAxis:{type:'value',axisLabel:{color:'#64748b'},splitLine:{lineStyle:{color:'#f1f5f9'}}},
+      dataZoom:ks.length>30?[{type:'slider',height:18,bottom:8}]:[],
+      series:CATS.filter(function(c){return seriesData[c];}).map(function(c){
+        return {name:c,type:'line',stack:'总量',areaStyle:{opacity:.25},smooth:true,symbol:'none',
+          data:ks.map(function(k){return seriesData[c][k]||0;})};
+      })},true);
+    area.off('click');area.on('click',function(p){var cat=p.seriesName||p.name;if(cat)openCatDrill(cat);});
+  }
+  renderCatDrill();
+}
+
+/* ---------- 13. 页面六：岗位/业务分析 ---------- */
+function crossMatrix(tasks,rowFn,colFn){
+  var rows={},cols={},mat={};
+  tasks.forEach(function(t){
+    var r=rowFn(t),c=colFn(t);
+    rows[r]=1;cols[c]=1;
+    if(!mat[r])mat[r]={};
+    mat[r][c]=(mat[r][c]||0)+1;
+  });
+  var rl=Object.keys(rows).sort(),cl=Object.keys(cols);
+  var arr=[],maxV=0;
+  for(var y=0;y<rl.length;y++){
+    arr.push(cl.map(function(c){var v=mat[rl[y]][c]||0;if(v>maxV)maxV=v;return v;}));
+  }
+  return {rows:rl,cols:cl,mat:arr,max:maxV};
+}
+function renderPosition(){
+  var tasks=getFilteredTasks();
+  var posM=crossMatrix(tasks,function(t){return USERS[t.userIdx].position;},function(t){return t.category;});
+  var bizM=crossMatrix(tasks,function(t){return USERS[t.userIdx].biz;},function(t){return t.category;});
+  var h1=getChart('posHeatChart');
+  if(h1)h1.setOption(heatOption(posM.rows,posM.cols,posM.mat,posM.max),true);
+  var h2=getChart('bizHeatChart');
+  if(h2)h2.setOption(heatOption(bizM.rows,bizM.cols,bizM.mat,bizM.max),true);
+  // 交叉统计表（岗位 × 类别）
+  var html='<thead><tr><th>岗位</th>'+posM.cols.map(function(c){return '<th>'+esc(c)+'</th>';}).join('')+'<th>合计</th></tr></thead><tbody>';
+  var colTotals={};
+  posM.rows.forEach(function(r,i){
+    var rowSum=0;
+    html+='<tr><td><b>'+esc(r)+'</b></td>'+posM.cols.map(function(c,j){var v=posM.mat[i][j];rowSum+=v;colTotals[c]=(colTotals[c]||0)+v;return '<td>'+fmtNum(v)+'</td>';}).join('')+'<td><b>'+fmtNum(rowSum)+'</b></td></tr>';
+  });
+  html+='<tr><td><b>合计</b></td>'+posM.cols.map(function(c){return '<td><b>'+fmtNum(colTotals[c]||0)+'</b></td>';}).join('')+'<td><b>'+fmtNum(tasks.length)+'</b></td></tr>';
+  document.getElementById('crossTable').innerHTML=html+'</tbody>';
+}
+function exportCross(){
+  var tasks=getFilteredTasks();
+  var posM=crossMatrix(tasks,function(t){return USERS[t.userIdx].position;},function(t){return t.category;});
+  var rows=[];
+  posM.rows.forEach(function(r,i){rows.push([r].concat(posM.mat[i]).concat([posM.mat[i].reduce(function(a,b){return a+b;},0)]));});
+  exportCSV('岗位_任务类别_交叉统计.csv',['岗位'].concat(posM.cols).concat(['合计']),rows);
+}
+
+/* ---------- 14. 页面七：提示词与产物分析 ---------- */
+var KW_POOL=['视频','脚本','文案','数据','看板','分析','流程图','海报','翻译','PPT','文档','代码','组件','报告','方案','营销','产品','需求','优化','设计','图片','会议','宣传','活动','用户','运营','总结','表格','结构','要点'];
+var LEN_BUCKETS=[['≤60字',0,60],['61-90字',61,90],['91-120字',91,120],['121-150字',121,150],['151-200字',151,200],['>200字',201,100000]];
+function renderPrompt(){
+  var tasks=getFilteredTasks();
+  // 长度分布直方图
+  var lens=LEN_BUCKETS.map(function(b){return 0;});
+  tasks.forEach(function(t){
+    for(var i=0;i<LEN_BUCKETS.length;i++)if(t.promptLen>=LEN_BUCKETS[i][1]&&t.promptLen<=LEN_BUCKETS[i][2]){lens[i]++;break;}
+  });
+  var hist=getChart('promptHistChart');
+  if(hist)hist.setOption({color:['#2563eb'],
+    tooltip:{trigger:'axis',backgroundColor:'#fff',borderColor:'#e2e8f0'},
+    grid:{left:44,right:16,top:24,bottom:40},
+    xAxis:{type:'category',data:LEN_BUCKETS.map(function(b){return b[0];}),axisLabel:{color:'#64748b'},axisLine:{lineStyle:{color:'#e2e8f0'}}},
+    yAxis:{type:'value',name:'任务数',nameTextStyle:{color:'#94a3b8'},axisLabel:{color:'#64748b'},splitLine:{lineStyle:{color:'#f1f5f9'}}},
+    series:[{type:'bar',barMaxWidth:44,data:lens.map(function(v,i){return {value:v,itemStyle:{borderRadius:[4,4,0,0],color:CHART_COLORS[i%CHART_COLORS.length]}};})}]},true);
+  // 高频关键词 Top15
+  var kw={};
+  tasks.forEach(function(t){
+    var s=t.prompt;
+    KW_POOL.forEach(function(k){var idx=s.indexOf(k);if(idx>-1)kw[k]=(kw[k]||0)+1;});
+  });
+  var top=Object.keys(kw).map(function(k){return {k:k,v:kw[k]};}).sort(function(a,b){return b.v-a.v;}).slice(0,15).reverse();
+  var kwc=getChart('kwBarChart');
+  if(kwc)kwc.setOption({color:['#0891b2'],
+    tooltip:{trigger:'axis',backgroundColor:'#fff',borderColor:'#e2e8f0'},
+    grid:{left:70,right:40,top:16,bottom:30},
+    xAxis:{type:'value',axisLabel:{color:'#64748b'},splitLine:{lineStyle:{color:'#f1f5f9'}}},
+    yAxis:{type:'category',data:top.map(function(x){return x.k;}),axisLabel:{color:'#475569'},axisLine:{lineStyle:{color:'#e2e8f0'}}},
+    series:[{type:'bar',barMaxWidth:16,data:top.map(function(x){return x.v;}),
+      label:{show:true,position:'right',color:'#64748b',fontSize:10},itemStyle:{borderRadius:[0,4,4,0]}}]},true);
+  // 产物类型分布
+  var om={};
+  tasks.forEach(function(t){t.outputs.forEach(function(o){om[o.type]=(om[o.type]||0)+1;});});
+  var pie=getChart('outputPieChart');
+  if(pie)pie.setOption({color:CHART_COLORS,
+    tooltip:{trigger:'item',formatter:'{b}<br/>数量：{c}（{d}%）'},
+    legend:{orient:'vertical',right:8,top:'middle',textStyle:{color:'#475569'}},
+    series:[{type:'pie',radius:['34%','62%'],center:['36%','50%'],
+      label:{formatter:'{b}: {d}%',color:'#64748b',fontSize:11},
+      data:Object.keys(om).map(function(k){return {name:k,value:om[k]};}).sort(function(a,b){return b.value-a.value;})}]},true);
+}
+
+/* ---------- 15. 页面八：多轮对话分析 ---------- */
+var ROUND_BUCKETS=[['1轮',1,1],['2-3轮',2,3],['4-6轮',4,6],['7轮以上',7,99]];
+function avgOf(group){ // group: {count, rounds}
+  var list=groupList(group);
+  return list.map(function(g){return {name:g.key,avg:g.count?Math.round(g.rounds/g.count*100)/100:0,count:g.count};});
+}
+function renderDialogue(){
+  var tasks=getFilteredTasks();
+  var dist=ROUND_BUCKETS.map(function(b){return 0;});
+  tasks.forEach(function(t){
+    for(var i=0;i<ROUND_BUCKETS.length;i++)if(t.rounds>=ROUND_BUCKETS[i][1]&&t.rounds<=ROUND_BUCKETS[i][2]){dist[i]++;break;}
+  });
+  var dc=getChart('roundDistChart');
+  if(dc)dc.setOption({color:['#2563eb'],
+    tooltip:{trigger:'axis',backgroundColor:'#fff',borderColor:'#e2e8f0'},
+    grid:{left:40,right:16,top:24,bottom:36},
+    xAxis:{type:'category',data:ROUND_BUCKETS.map(function(b){return b[0];}),axisLabel:{color:'#64748b'},axisLine:{lineStyle:{color:'#e2e8f0'}}},
+    yAxis:{type:'value',name:'任务数',nameTextStyle:{color:'#94a3b8'},axisLabel:{color:'#64748b'},splitLine:{lineStyle:{color:'#f1f5f9'}}},
+    series:[{type:'bar',barMaxWidth:40,data:dist,itemStyle:{borderRadius:[4,4,0,0]},label:{show:true,position:'top',color:'#64748b',fontSize:10}}]},true);
+  var deptG=groupStats(tasks,function(t){return USERS[t.userIdx].dept;});
+  var dd=avgOf(deptG).sort(function(a,b){return a.name.localeCompare(b.name,'zh');});
+  var d1=getChart('deptRoundChart');
+  if(d1)d1.setOption({color:['#2563eb'],
+    tooltip:{trigger:'axis',backgroundColor:'#fff',borderColor:'#e2e8f0'},
+    grid:{left:40,right:16,top:24,bottom:56},
+    xAxis:{type:'category',data:dd.map(function(x){return x.name;}),axisLabel:{color:'#64748b',rotate:24,interval:0},axisLine:{lineStyle:{color:'#e2e8f0'}}},
+    yAxis:{type:'value',name:'平均轮次',nameTextStyle:{color:'#94a3b8'},axisLabel:{color:'#64748b'},splitLine:{lineStyle:{color:'#f1f5f9'}}},
+    series:[{type:'bar',barMaxWidth:34,data:dd.map(function(x){return x.avg;}),label:{show:true,position:'top',color:'#64748b',fontSize:10},itemStyle:{borderRadius:[4,4,0,0]}}]},true);
+  var posG=groupStats(tasks,function(t){return USERS[t.userIdx].position;});
+  var pp=avgOf(posG).sort(function(a,b){return b.avg-a.avg;});
+  var d2=getChart('posRoundChart');
+  if(d2)d2.setOption({color:['#0891b2'],
+    tooltip:{trigger:'axis',backgroundColor:'#fff',borderColor:'#e2e8f0'},
+    grid:{left:40,right:16,top:24,bottom:70},
+    xAxis:{type:'category',data:pp.map(function(x){return x.name;}),axisLabel:{color:'#64748b',rotate:38,interval:0,fontSize:10},axisLine:{lineStyle:{color:'#e2e8f0'}}},
+    yAxis:{type:'value',name:'平均轮次',nameTextStyle:{color:'#94a3b8'},axisLabel:{color:'#64748b'},splitLine:{lineStyle:{color:'#f1f5f9'}}},
+    series:[{type:'bar',barMaxWidth:26,data:pp.map(function(x){return x.avg;}),label:{show:true,position:'top',color:'#64748b',fontSize:10},itemStyle:{borderRadius:[4,4,0,0]}}]},true);
+  // 高轮次任务特征卡片
+  var high=tasks.filter(function(t){return t.rounds>=7;});
+  var avgAllHigh=high.length?Math.round(high.reduce(function(s,t){return s+t.rounds;},0)/high.length*100)/100:0;
+  var avgLenAll=tasks.length?Math.round(tasks.reduce(function(s,t){return s+t.promptLen;},0)/tasks.length):0;
+  var avgLenHigh=high.length?Math.round(high.reduce(function(s,t){return s+t.promptLen;},0)/high.length):0;
+  var hg=groupStats(high,function(t){return t.category;});
+  var hCats=groupList(hg).sort(function(a,b){return b.count-a.count;}).slice(0,3).map(function(g){return g.key+'（'+g.count+'）';});
+  var hDept=groupList(groupStats(high,function(t){return USERS[t.userIdx].dept;})).sort(function(a,b){return b.count-a.count;}).slice(0,3).map(function(g){return g.key+'（'+g.count+'）';});
+  var examples=high.sort(function(a,b){return b.rounds-a.rounds;}).slice(0,3);
+  document.getElementById('featCards').innerHTML=
+    '<div class="feat-card"><div class="h">规模</div><p>高轮次（≥7轮）任务共 <b>'+high.length+'</b> 个，占全部任务的 <b>'+(tasks.length?Math.round(high.length/tasks.length*1000)/10:0)+'%</b>，平均轮次 <b>'+avgAllHigh+'</b> 轮。多轮交互通常意味着需求复杂或需要反复修改。</p></div>'+
+    '<div class="feat-card"><div class="h">类别与部门分布</div><p>高轮次任务最集中的类别为：'+(hCats.join('、')||'—')+'。<br/>最集中的部门为：'+(hDept.join('、')||'—')+'。</p></div>'+
+    '<div class="feat-card"><div class="h">提示词特征</div><p>高轮次任务平均提示词长度 <b>'+avgLenHigh+'</b> 字，全体任务平均 <b>'+avgLenAll+'</b> 字'+(avgLenHigh>avgLenAll?'，提示词更长、需求描述更复杂，往往伴随多轮迭代修改。':'，长度接近，轮次主要由需求复杂度驱动。')+'</p></div>'+
+    '<div class="feat-card" style="grid-column:span 3"><div class="h">典型高轮次任务示例</div><p>'+
+    examples.map(function(t){return '【'+t.id+'】'+esc(t.title)+' — '+esc(USERS[t.userIdx].name)+'（'+t.rounds+' 轮，'+t.category+'）';}).join('<br/>')+'</p></div>';
+}
+
+/* ---------- 16. 页面九：上传资料分析 ---------- */
+function renderUpload(){
+  var tasks=getFilteredTasks();
+  // 资料类型分布
+  var tm={};
+  tasks.forEach(function(t){t.uploads.forEach(function(u){tm[u.type]=(tm[u.type]||0)+1;});});
+  var pie=getChart('uploadPieChart');
+  if(pie)pie.setOption({color:CHART_COLORS,
+    tooltip:{trigger:'item',formatter:'{b}<br/>数量：{c}（{d}%）'},
+    legend:{orient:'vertical',right:8,top:'middle',textStyle:{color:'#475569'}},
+    series:[{type:'pie',radius:['34%','62%'],center:['36%','50%'],
+      label:{formatter:'{b}: {d}%',color:'#64748b',fontSize:11},
+      data:Object.keys(tm).map(function(k){return {name:k,value:tm[k]};}).sort(function(a,b){return b.value-a.value;})}]},true);
+  // 上传频次 Top10 用户
+  var um=userStatsMap(tasks);
+  var top=USERS.map(function(u,i){return {name:u.name,dept:u.dept,ups:um[i].ups};})
+    .sort(function(a,b){return b.ups-a.ups;}).slice(0,10);
+  var topR=top.slice().reverse();
+  var bar=getChart('uploadTopChart');
+  if(bar)bar.setOption({color:['#059669'],
+    tooltip:{trigger:'axis',backgroundColor:'#fff',borderColor:'#e2e8f0',
+      formatter:function(ps){var p=topR[ps[0].dataIndex];return p.name+'（'+p.dept+'）<br/>上传资料：'+p.ups+' 份';}},
+    grid:{left:80,right:40,top:16,bottom:30},
+    xAxis:{type:'value',axisLabel:{color:'#64748b'},splitLine:{lineStyle:{color:'#f1f5f9'}}},
+    yAxis:{type:'category',data:topR.map(function(x){return x.name;}),axisLabel:{color:'#475569'},axisLine:{lineStyle:{color:'#e2e8f0'}}},
+    series:[{type:'bar',barMaxWidth:16,data:topR.map(function(x){return x.ups;}),
+      label:{show:true,position:'right',color:'#64748b',fontSize:10},itemStyle:{borderRadius:[0,4,4,0]}}]},true);
+  // 资料类型 × 任务类别 热力图
+  var rows=[],cols=CATS.slice();
+  var tm2={};
+  tasks.forEach(function(t){t.uploads.forEach(function(u){
+    if(rows.indexOf(u.type)<0)rows.push(u.type);
+    if(!tm2[u.type])tm2[u.type]={};
+    tm2[u.type][t.category]=(tm2[u.type][t.category]||0)+1;
+  });});
+  rows.sort();
+  var mat=[],maxV=0;
+  rows.forEach(function(r){mat.push(cols.map(function(c){var v=tm2[r][c]||0;if(v>maxV)maxV=v;return v;}));});
+  var h=getChart('uploadHeatChart');
+  if(h)h.setOption(heatOption(rows,cols,mat,maxV),true);
+}
+
+/* ---------- 17. 页面十：自定义报表 ---------- */
+var METRIC_DEFS=[['tasks','任务数'],['rounds','对话轮次'],['outputs','产物数'],['uploads','上传资料数']];
+var DIM_NAMES={day:'时间（按天）',week:'时间（按周）',month:'时间（按月）',dept:'部门',position:'岗位',category:'任务类别'};
+function validMetrics(metrics){ // 过滤未知指标值，防止脏 localStorage 数据
+  if(!Array.isArray(metrics))return [];
+  return metrics.filter(function(m){return METRIC_DEFS.some(function(x){return x[0]===m;});});
+}
+function renderSavedReports(){
+  var raw=lsGet('wb_saved_reports',[]);
+  state.savedReports=Array.isArray(raw)?raw.filter(function(r){return r&&typeof r==='object'&&validMetrics(r.metrics).length>0&&r.metrics.length>0;}):[];
+  var box=document.getElementById('savedReports');
+  if(!state.savedReports.length){box.innerHTML='<span class="muted">暂无常用报表，点击上方「保存为常用报表」可将当前配置保存（存储于浏览器 localStorage）。</span>';return;}
+  box.innerHTML=state.savedReports.map(function(r,i){
+    return '<div class="saved-report-item"><span><b>'+esc(r.name)+'</b> <span class="muted">维度：'+(DIM_NAMES[r.dim]||r.dim)+' · 指标：'+validMetrics(r.metrics).map(function(m){return METRIC_DEFS.filter(function(x){return x[0]===m;})[0][1];}).join('、')+'</span></span>'+
+      '<span class="ops"><button onclick="applyReport('+i+')">应用</button><button onclick="delReport('+i+')" style="color:#dc2626">删除</button></span></div>';
+  }).join('');
+}
+function currentReportMetrics(){
+  var m=[];
+  document.querySelectorAll('#reportMetrics input:checked').forEach(function(c){m.push(c.value);});
+  return m;
+}
+function generateReport(){
+  var dim=document.getElementById('reportDim').value;
+  var metrics=currentReportMetrics();
+  if(!metrics.length){alert('请至少选择一个指标');return;}
+  state.report.dim=dim;state.report.metrics=metrics;
+  var tasks=getFilteredTasks();
+  var keyFn;
+  if(dim==='day')keyFn=function(t){return t.day;};
+  else if(dim==='week')keyFn=function(t){return weekKey(t.time);};
+  else if(dim==='month')keyFn=function(t){return monthKey(t.time);};
+  else if(dim==='dept')keyFn=function(t){return USERS[t.userIdx].dept;};
+  else if(dim==='position')keyFn=function(t){return USERS[t.userIdx].position;};
+  else keyFn=function(t){return t.category;};
+  var g=groupStats(tasks,keyFn);
+  var keys=Object.keys(g).sort();
+  var rows=keys.map(function(k){
+    var m={key:k,tasks:g[k].count,rounds:g[k].rounds,outputs:g[k].outs,uploads:g[k].ups};
+    return m;
+  });
+  state.report.lastRows=rows;
+  var isTime=(dim==='day'||dim==='week'||dim==='month');
+  state.report.lastTitle=DIM_NAMES[dim]+' × '+metrics.map(function(m){return METRIC_DEFS.filter(function(x){return x[0]===m;})[0][1];}).join('/');
+  document.getElementById('reportChartCard').style.display='block';
+  document.getElementById('reportTableCard').style.display='block';
+  document.getElementById('reportChartTitle').textContent=state.report.lastTitle+'（'+keys.length+' 个'+(isTime?'时间点':'维度值')+'）';
+  var c=getChart('reportChart');
+  if(c){
+    var series=metrics.map(function(m,idx){
+      var def=METRIC_DEFS.filter(function(x){return x[0]===m;})[0];
+      return {name:def[1],type:isTime?'line':'bar',smooth:true,symbol:isTime?'none':'circle',
+        barMaxWidth:isTime?undefined:28,
+        areaStyle:isTime?{opacity:.12}:undefined,
+        data:rows.map(function(r){return r[m];})};
+    });
+    c.setOption({color:CHART_COLORS,
+      tooltip:{trigger:'axis',backgroundColor:'#fff',borderColor:'#e2e8f0'},
+      legend:{top:0,textStyle:{color:'#475569'}},
+      grid:{left:52,right:24,top:32,bottom:keys.length>24?70:44},
+      xAxis:{type:'category',data:keys,axisLabel:{color:'#64748b',hideOverlap:true,interval:'auto'},axisLine:{lineStyle:{color:'#e2e8f0'}}},
+      yAxis:{type:'value',axisLabel:{color:'#64748b'},splitLine:{lineStyle:{color:'#f1f5f9'}}},
+      dataZoom:keys.length>30?[{type:'slider',height:18,bottom:10}]:[],
+      series:series},true);
+  }
+  var html='<thead><tr><th>'+DIM_NAMES[dim]+'</th>'+metrics.map(function(m){return '<th>'+METRIC_DEFS.filter(function(x){return x[0]===m;})[0][1]+'</th>';}).join('')+'</tr></thead><tbody>';
+  rows.forEach(function(r){
+    html+='<tr><td><b>'+esc(r.key)+'</b></td>'+metrics.map(function(m){return '<td>'+fmtNum(r[m])+'</td>';}).join('')+'</tr>';
+  });
+  document.getElementById('reportTable').innerHTML=html+'</tbody>';
+}
+function saveReport(){
+  var dim=document.getElementById('reportDim').value;
+  var metrics=currentReportMetrics();
+  if(!metrics.length){alert('请至少选择一个指标');return;}
+  var list=lsGet('wb_saved_reports',[]);
+  list.push({name:'报表'+(list.length+1),dim:dim,metrics:metrics});
+  lsSet('wb_saved_reports',list);
+  renderSavedReports();
+}
+function applyReport(i){
+  var r=state.savedReports[i];
+  if(!r)return;
+  document.getElementById('reportDim').value=r.dim;
+  document.querySelectorAll('#reportMetrics input').forEach(function(c){c.checked=r.metrics.indexOf(c.value)>-1;});
+  generateReport();
+}
+function delReport(i){
+  var list=lsGet('wb_saved_reports',[]);
+  list.splice(i,1);
+  lsSet('wb_saved_reports',list);
+  renderSavedReports();
+}
+function exportReportTable(){
+  if(!state.report.lastRows){alert('请先生成报表');return;}
+  var rows=state.report.lastRows.map(function(r){
+    return [r.key].concat(state.report.metrics.map(function(m){return r[m];}));
+  });
+  exportCSV('自定义报表.csv',[DIM_NAMES[state.report.dim]].concat(state.report.metrics.map(function(m){return METRIC_DEFS.filter(function(x){return x[0]===m;})[0][1];})),rows);
+}
+function renderReport(){renderSavedReports();}
+
+/* ---------- 18. 初始化 ---------- */
+function bindEvents(){
+  document.querySelectorAll('.nav-item').forEach(function(n){
+    n.addEventListener('click',function(){switchPage(n.getAttribute('data-page'));});
+  });
+  document.querySelectorAll('.tf-btn[data-range]').forEach(function(b){
+    b.addEventListener('click',function(){applyRange(b.getAttribute('data-range'));});
+  });
+  document.getElementById('applyCustom').addEventListener('click',function(){applyRange('custom');});
+  document.querySelectorAll('.tf-btn[data-gran]').forEach(function(b){
+    b.addEventListener('click',function(){
+      state.granularity=b.getAttribute('data-gran');
+      document.querySelectorAll('.tf-btn[data-gran]').forEach(function(x){x.classList.toggle('active',x===b);});
+      renderOverview();
+    });
+  });
+  // 组织架构
+  document.querySelectorAll('#orgModeTabs .tab').forEach(function(t){
+    t.addEventListener('click',function(){setOrgMode(t.getAttribute('data-mode'));});
+  });
+  document.getElementById('orgSortSel').addEventListener('change',function(){state.orgSort=this.value;renderOrgRight();if(state.orgMode==='task')renderOrgTaskTable();});
+  // 用户明细
+  document.getElementById('userSearchBtn').addEventListener('click',userSearch);
+  document.getElementById('userSearchInput').addEventListener('keydown',function(e){if(e.key==='Enter')userSearch();});
+  document.getElementById('userResetBtn').addEventListener('click',function(){document.getElementById('userSearchInput').value='';state.userQuery='';state.userPage=1;renderUsersTable(filteredUsers());});
+  document.querySelectorAll('#userTable th.sortable').forEach(function(th){
+    th.addEventListener('click',function(e){e.stopPropagation();sortUsers(th.getAttribute('data-key'));});
+  });
+  // 任务明细
+  var tf=[['taskFDept','dept'],['taskFUser','user'],['taskFCat','cat'],['taskFPos','pos'],['taskFBiz','biz']];
+  tf.forEach(function(pair){
+    document.getElementById(pair[0]).addEventListener('change',function(){onTaskFilter(pair[1],this);});
+  });
+  document.getElementById('taskResetBtn').addEventListener('click',function(){
+    state.taskFilters={dept:'',user:'',cat:'',pos:'',biz:''};state.taskPage=1;state.taskOpen='';
+    renderTasks();
+  });
+  document.getElementById('taskExportBtn').addEventListener('click',exportTasks);
+  // 分类下钻
+  document.getElementById('catDrillClose').addEventListener('click',closeCatDrill);
+  document.getElementById('crossExportBtn').addEventListener('click',exportCross);
+  // 自定义报表
+  document.getElementById('reportGenBtn').addEventListener('click',generateReport);
+  document.getElementById('reportSaveBtn').addEventListener('click',saveReport);
+  document.getElementById('reportExportBtn').addEventListener('click',exportReportTable);
+  window.addEventListener('resize',resizeAllCharts);
+}
+function init(){
+  // 默认时间区间与日期输入框初始值
+  var today=new Date();
+  document.getElementById('dateFrom').value=fmtDate(dayStart(Date.now())-89*DAY_MS);
+  document.getElementById('dateTo').value=fmtDate(today);
+  bindEvents();
+  applyRange('90d'); // 默认近90天，applyRange 内部会 refreshPage 渲染总览
+  switchPage('overview');
+}
+window.addEventListener('load',init);
+</script>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>
