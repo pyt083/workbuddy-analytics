@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:,">
+<title>WorkBuddy 授权回调</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-functions-compat.js"></script>
+<script>
+/* ===== Firebase Web 配置占位（与主页 index.html 填写同一份配置）=====
+ * Firebase 控制台 → 项目设置 → 通用 → 您的应用 → SDK 设置和配置。
+ * 本地联调加 ?emulator=1 连接 Firebase 本地模拟器。
+ */
+window.__WB_FIREBASE_CONFIG__={
+  apiKey:"YOUR_API_KEY",
+  authDomain:"YOUR_PROJECT_ID.firebaseapp.com",
+  projectId:"YOUR_PROJECT_ID",
+  storageBucket:"YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId:"YOUR_SENDER_ID",
+  appId:"YOUR_APP_ID"
+};
+window.__WB_USE_EMULATOR__=location.search.indexOf('emulator=1')>-1;
+/* WorkBuddy 开放平台常量（与主页一致） */
+var WB_CLIENT_ID='cb_YipjG5TEevNZFIblffrL';
+var WB_REDIRECT_URI='https://pyt083.github.io/workbuddy-analytics/oauth/callback'; // 与登记的回调地址字节级一致
+var WB_SCOPES='user.profile.readable user.task.readable';
+var WB_AUTHORIZE_URL='https://www.workbuddy.cn/openapi/v2/authorize';
+var WB_HOME='/workbuddy-analytics/'; // 主页地址（绝对路径，不依赖回调页相对层级，避免 ../../ 落到站点根 404）
+</script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  background:#f1f5f9;color:#1e293b;font-size:14px;height:100vh;display:flex;align-items:center;justify-content:center;
+}
+.card{
+  width:420px;max-width:92vw;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px;
+  box-shadow:0 4px 16px rgba(15,23,42,.06);text-align:center;
+}
+.dot{width:36px;height:36px;border-radius:9px;background:#2563eb;margin:0 auto 14px;position:relative;overflow:hidden}
+.dot::after{content:"";position:absolute;inset:11px;background:#fff;border-radius:3px}
+h1{font-size:17px;margin-bottom:8px}
+.muted{color:#64748b;font-size:12px;line-height:1.7}
+.err{color:#dc2626;font-size:12px;line-height:1.7;margin-top:10px;word-break:break-all}
+.ok{color:#15803d;font-size:12px;margin-top:10px}
+.btn{
+  display:inline-block;margin-top:16px;padding:8px 18px;border-radius:8px;border:none;cursor:pointer;
+  background:#2563eb;color:#fff;font-size:13px;text-decoration:none;
+}
+.btn:hover{background:#1d4ed8}
+.btn-ghost{background:#fff;color:#2563eb;border:1px solid #2563eb}
+.spin{
+  width:22px;height:22px;margin:14px auto 0;border-radius:50%;
+  border:3px solid #dbeafe;border-top-color:#2563eb;animation:sp .8s linear infinite;
+}
+@keyframes sp{to{transform:rotate(360deg)}}
+code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:11px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="dot"></div>
+  <h1>WorkBuddy 授权回调</h1>
+  <div class="muted">正在完成 OAuth2.1 授权，请稍候…</div>
+  <div class="spin" id="spinner"></div>
+  <div id="main" style="display:none">
+    <div id="msg" class="muted"></div>
+    <div id="err" class="err"></div>
+    <div id="okMsg" class="ok" style="display:none">✓ 授权成功，正在返回看板…</div>
+    <div id="actions" style="display:none">
+      <a class="btn" id="backBtn" href="/workbuddy-analytics/">返回看板</a>
+      <a class="btn btn-ghost" id="retryBtn" href="javascript:void(0)">重新授权</a>
+    </div>
+  </div>
+</div>
+<script>
+/* ============================================================
+ * OAuth2.1 回调落地页（GitHub Pages 路径 /workbuddy-analytics/oauth/callback → 本文件）
+ * 流程：解析 ?code&state → 校验 state（sessionStorage 防 CSRF）→
+ *       需已登录本站 Firebase（同源共享会话）→ callable wbOauthCallback
+ *       服务端换 token（token 不进浏览器）→ 标记数据源=real → 跳回主页
+ * ============================================================ */
+function qs(k){var m=new RegExp('[?&]'+k+'=([^&#]*)').exec(location.search);return m?decodeURIComponent(m[1].replace(/\+/g,'%20')):'';}
+function showDone(ok,text,errText){
+  document.getElementById('spinner').style.display='none';
+  document.getElementById('main').style.display='block';
+  document.getElementById('msg').textContent=text||'';
+  if(errText)document.getElementById('err').textContent=errText;
+  if(ok){
+    document.getElementById('okMsg').style.display='block';
+    setTimeout(function(){location.href=WB_HOME;},1200);
+  }else{
+    document.getElementById('actions').style.display='block';
+  }
+}
+function buildAuthorizeUrl(state){
+  return WB_AUTHORIZE_URL
+    +'?response_type=code'
+    +'&client_id='+encodeURIComponent(WB_CLIENT_ID)
+    +'&redirect_uri='+encodeURIComponent(WB_REDIRECT_URI)
+    +'&scope='+encodeURIComponent(WB_SCOPES)
+    +'&state='+encodeURIComponent(state);
+}
+document.getElementById('retryBtn').addEventListener('click',function(){
+  var st='';var chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  for(var i=0;i<24;i++)st+=chars.charAt(Math.floor(Math.random()*chars.length));
+  try{sessionStorage.setItem('wb_oauth_state',st);}catch(e){}
+  location.href=buildAuthorizeUrl(st);
+});
+document.getElementById('backBtn').href=WB_HOME;
+
+(function(){
+  var code=qs('code'),stateIn=qs('state'),providerErr=qs('error');
+  if(providerErr){
+    showDone(false,'WorkBuddy 授权被拒绝或失败','授权端点返回错误：'+providerErr+(qs('error_description')?(' — '+qs('error_description')):''));
+    return;
+  }
+  if(!code){
+    showDone(false,'回调地址缺少授权码（code）参数','请从看板内点击「去授权」重新发起授权流程。');
+    return;
+  }
+  // state 校验（防 CSRF）：必须与发起授权时存入 sessionStorage 的值一致
+  var saved='';
+  try{saved=sessionStorage.getItem('wb_oauth_state')||'';}catch(e){}
+  if(!saved||!stateIn||saved!==stateIn){
+    showDone(false,'state 校验失败：本次回调不是你发起的授权（或会话已过期）','请回到看板重新点击「去授权」。');
+    return;
+  }
+  if(typeof firebase==='undefined'){
+    showDone(false,'Firebase SDK 加载失败','请检查网络后刷新本页。');
+    return;
+  }
+  var app=firebase.initializeApp(window.__WB_FIREBASE_CONFIG__);
+  var auth=app.auth(),fn=app.functions();
+  if(window.__WB_USE_EMULATOR__){
+    try{auth.useEmulator('http://localhost:9099');fn.useEmulator('localhost',5001);}catch(e){console.warn(e);}
+  }
+  // redirect_uri 必须与授权阶段字节级一致：从当前地址还原（线上 = 登记的回调地址）
+  var redirectUri=location.origin+location.pathname;
+  if(redirectUri!==WB_REDIRECT_URI){
+    showDone(false,'回调地址与登记的不一致','当前回调地址 <code>'+redirectUri+'</code> 与开放平台登记的 <code>'+WB_REDIRECT_URI+'</code> 不一致（本地 localhost 无法完成线上授权）。');
+    return;
+  }
+  auth.onAuthStateChanged(function(user){
+    if(!user){
+      showDone(false,'请先登录看板账号','WorkBuddy 授权需要绑定到你的看板账号：请先返回看板登录，再重新发起授权。');
+      return;
+    }
+    fn.httpsCallable('wbOauthCallback')({code:code,redirectUri:redirectUri}).then(function(res){
+      var d=(res&&res.data)||{};
+      try{sessionStorage.removeItem('wb_oauth_state');}catch(e){}
+      try{localStorage.setItem('wb_data_source','real');}catch(e){}
+      showDone(true,'已连接 WorkBuddy 开放平台'+(d.nickname?('（'+d.nickname+'）'):'')+'，即将返回看板并自动加载你的任务数据。');
+    }).catch(function(e){
+      var map={
+        'functions/failed-precondition':'授权码已过期或被使用，请重新发起授权',
+        'functions/external':'WorkBuddy token 接口调用失败',
+        'functions/invalid-argument':'参数错误（redirectUri 与登记地址不一致）',
+        'functions/unauthenticated':'请先登录看板账号',
+        'functions/internal':'服务器内部错误'
+      };
+      var c=e&&e.code||'';
+      showDone(false,map[c]||'授权失败',c?('['+c+'] '+(e&&e.message||'')):String(e&&e.message||e));
+    });
+  });
+})();
+</script>
+</body>
+</html>
