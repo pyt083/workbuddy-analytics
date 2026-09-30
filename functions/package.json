@@ -1,0 +1,16 @@
+{
+  "name": "functions",
+  "description": "WorkBuddy 数据分析平台 Cloud Functions",
+  "scripts": {
+    "lint": "eslint .",
+    "build": "echo 'no build step (plain JS)'",
+    "serve": "firebase emulators:start --only functions,firestore,auth"
+  },
+  "engines": { "node": "20" },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^5.0.1"
+  },
+  "private": true
+}
