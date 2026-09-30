@@ -5,6 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" href="data:,">
 <title>WorkBuddy 数据分析平台</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-functions-compat.js"></script>
+<script>
+/* ===== Firebase Web 配置占位 =====
+ * 替换为你的 Firebase 项目 Web 应用配置：Firebase 控制台 → 项目设置 → 通用 → 您的应用 → SDK 设置和配置。
+ * 本地/联调用 Firebase Emulator 时，给 URL 加上 ?emulator=1 即可连接本地模拟器（无需真实项目）。
+ */
+window.__WB_FIREBASE_CONFIG__={
+  apiKey:"YOUR_API_KEY",
+  authDomain:"YOUR_PROJECT_ID.firebaseapp.com",
+  projectId:"YOUR_PROJECT_ID",
+  storageBucket:"YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId:"YOUR_SENDER_ID",
+  appId:"YOUR_APP_ID"
+};
+window.__WB_USE_EMULATOR__=location.search.indexOf('emulator=1')>-1;
+</script>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <style>
 /* ============ 全局基础 ============ */
@@ -210,6 +229,49 @@ table.tbl tr.detail-row td{background:#f8fafc;padding:12px 16px;border-bottom:2p
 }
 .saved-report-item .ops button{margin-left:6px;border:none;background:none;cursor:pointer;color:var(--primary);font-size:12px}
 .empty-tip{padding:40px;text-align:center;color:var(--text-sub);font-size:13px}
+/* ============ 登录视图 / 用户菜单 ============ */
+.login-view{position:fixed;inset:0;background:linear-gradient(135deg,#eef2ff 0%,#f1f5f9 60%);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px}
+.login-card{background:#fff;border-radius:14px;box-shadow:0 12px 40px rgba(15,23,42,.12);padding:32px 36px;width:400px;max-width:92vw}
+.login-logo{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:700;color:var(--text)}
+.login-tabs{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin:18px 0 6px}
+.login-tabs span{flex:1;text-align:center;padding:9px;cursor:pointer;font-size:13px;color:var(--text-sub);background:#fff;transition:all .15s}
+.login-tabs span.active{background:var(--primary);color:#fff}
+.login-form label{display:block;font-size:12px;color:var(--text-sub);margin:12px 0 4px}
+.login-form input{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:6px;font-size:14px;color:var(--text);background:#fff}
+.login-form input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.login-form .btn{width:100%;margin-top:16px;padding:10px;font-size:14px}
+.pwd-strength{height:4px;border-radius:2px;background:#f1f5f9;overflow:hidden;margin-top:6px}
+.pwd-strength>div{height:100%;transition:width .2s,background .2s}
+.pwd-strength .weak{background:#dc2626;width:33%}
+.pwd-strength .mid{background:#f59e0b;width:66%}
+.pwd-strength .ok{background:#16a34a;width:100%}
+.login-err{color:#dc2626;font-size:12px;margin-top:8px;min-height:14px}
+.login-ok{color:#15803d;font-size:12px;margin-top:8px;min-height:14px}
+
+.user-menu{margin-left:8px;position:relative}
+.user-trigger{display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 10px 4px 4px;border-radius:6px;background:#f1f5f9;font-size:13px;color:var(--text)}
+.user-trigger:hover{background:#e2e8f0}
+.avatar{width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
+.user-dropdown{position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 12px 30px rgba(15,23,42,.12);min-width:220px;padding:6px;display:none;z-index:200}
+.user-dropdown.open{display:block}
+.user-dropdown .user-info{padding:8px 10px;border-bottom:1px solid var(--border);margin-bottom:4px}
+.user-dropdown .user-info .mail{font-size:12px;color:var(--text-sub);word-break:break-all}
+.user-dropdown .user-info .role-tag{display:inline-block;margin-top:4px;padding:1px 8px;border-radius:9px;font-size:11px}
+.user-dropdown .user-info .role-tag.admin{background:var(--primary-light);color:var(--primary-dark)}
+.user-dropdown .user-info .role-tag.user{background:#f1f5f9;color:var(--text-sub)}
+.user-dropdown a{display:block;padding:8px 10px;font-size:13px;color:var(--text);border-radius:5px;cursor:pointer;text-decoration:none}
+.user-dropdown a:hover{background:#f0f7ff;color:var(--primary)}
+.denied-card{padding:60px 40px;text-align:center;color:var(--text-sub)}
+.denied-card h3{color:var(--text);margin-bottom:8px}
+.action-btn{padding:4px 10px;border:1px solid var(--border);background:#fff;border-radius:5px;cursor:pointer;font-size:12px;color:var(--text);margin-right:4px}
+.action-btn:hover{border-color:var(--primary);color:var(--primary)}
+.action-btn.danger:hover{color:#dc2626;border-color:#dc2626}
+.role-pill{display:inline-block;padding:1px 8px;border-radius:9px;font-size:11px}
+.role-pill.admin{background:var(--primary-light);color:var(--primary-dark)}
+.role-pill.user{background:#f1f5f9;color:var(--text-sub)}
+.status-pill{display:inline-block;padding:1px 8px;border-radius:9px;font-size:11px}
+.status-pill.active{background:#dcfce7;color:#15803d}
+.status-pill.disabled{background:#fee2e2;color:#b91c1c}
 @media (max-width:1200px){
   .grid-6{grid-template-columns:repeat(3,1fr)}
   .kv-grid{grid-template-columns:repeat(2,1fr)}
@@ -239,6 +301,8 @@ table.tbl tr.detail-row td{background:#f8fafc;padding:12px 16px;border-bottom:2p
     <div class="nav-item" data-page="dialogue"><i class="ico">⇄</i>多轮对话分析</div>
     <div class="nav-item" data-page="upload"><i class="ico">⇪</i>上传资料分析</div>
     <div class="nav-item" data-page="report"><i class="ico">⊞</i>自定义报表</div>
+    <div class="nav-group-title" id="navAdminGroup" style="display:none">管理</div>
+    <div class="nav-item" data-page="admin" id="navAdmin" style="display:none"><i class="ico">⚙</i>管理后台</div>
   </aside>
   <div class="main">
     <div class="topbar">
@@ -254,6 +318,21 @@ table.tbl tr.detail-row td{background:#f8fafc;padding:12px 16px;border-bottom:2p
           <input type="date" id="dateTo" title="结束日期">
           <button class="btn" id="applyCustom" style="padding:4px 10px">应用</button>
         </span>
+      </div>
+      <div class="user-menu" id="userMenu" style="display:none">
+        <div class="user-trigger" onclick="toggleUserMenu(event)">
+          <span class="avatar" id="userAvatar">U</span>
+          <span id="userName">--</span>
+          <span class="muted" style="font-size:10px">▾</span>
+        </div>
+        <div class="user-dropdown" id="userDropdown">
+          <div class="user-info">
+            <div class="mail" id="userEmail">--</div>
+            <span class="role-tag admin" id="userRoleTag">--</span>
+          </div>
+          <a href="javascript:void(0)" id="userAdminLink" style="display:none" onclick="closeUserMenu();switchPage('admin')">⚙ 管理后台</a>
+          <a href="javascript:void(0)" onclick="closeUserMenu();doSignOut()">⎋ 退出登录</a>
+        </div>
       </div>
     </div>
     <div class="content" id="content">
@@ -488,6 +567,27 @@ table.tbl tr.detail-row td{background:#f8fafc;padding:12px 16px;border-bottom:2p
         </div>
       </section>
 
+      <!-- ================= 11. 管理后台（仅管理员可见）================= -->
+      <section class="page" id="page-admin">
+        <div class="card">
+          <div class="card-title">用户管理
+            <span class="sub">共 <b id="adminUserCount">0</b> 位用户</span>
+            <button class="btn btn-ghost" id="adminRefreshBtn" style="margin-left:auto">刷新</button>
+          </div>
+          <div class="tbl-scroll" style="max-height:600px">
+            <table class="tbl" id="adminTable">
+              <thead>
+                <tr>
+                  <th>显示名称</th><th>邮箱</th><th>角色</th><th>状态</th>
+                  <th>创建时间</th><th>最后登录</th><th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="adminTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
 <script>
 /* =========================================================================
  * WorkBuddy 数据分析平台 —— 单页看板（纯静态，可直接托管于 GitHub Pages）
@@ -702,7 +802,8 @@ var state={
   taskFilters:{dept:'',user:'',cat:'',pos:'',biz:''},taskPage:1,taskOpen:'',
   catDrill:null,catDrillPage:1,
   report:{dim:'day',metrics:['tasks'],lastRows:null,lastTitle:''},
-  savedReports:[],reportPage:1
+  savedReports:[],reportPage:1,
+  dashboardInited:false
 };
 
 /* ---------- 5. 时间筛选与过滤聚合 ---------- */
@@ -773,7 +874,8 @@ var PAGE_CHARTS={
   prompt:['promptHistChart','kwBarChart','outputPieChart'],
   dialogue:['roundDistChart','deptRoundChart','posRoundChart'],
   upload:['uploadPieChart','uploadTopChart','uploadHeatChart'],
-  report:['reportChart']
+  report:['reportChart'],
+  admin:[]
 };
 function getChart(id){
   var dom=document.getElementById(id);
@@ -785,7 +887,7 @@ function getChart(id){
 }
 function disposeCharts(ids){ids.forEach(function(id){if(chartStore[id]&&!chartStore[id].isDisposed()){chartStore[id].dispose();}delete chartStore[id];});}
 function resizeAllCharts(){Object.keys(chartStore).forEach(function(id){try{chartStore[id].resize();}catch(e){}});}
-var PAGES=['overview','org','users','tasks','category','position','prompt','dialogue','upload','report'];
+var PAGES=['overview','org','users','tasks','category','position','prompt','dialogue','upload','report','admin'];
 function switchPage(page){
   state.page=page;
   document.querySelectorAll('.nav-item').forEach(function(n){n.classList.toggle('active',n.getAttribute('data-page')===page);});
@@ -806,6 +908,7 @@ function renderPage(page){
   else if(page==='dialogue')renderDialogue();
   else if(page==='upload')renderUpload();
   else if(page==='report')renderReport();
+  else if(page==='admin')renderAdmin();
 }
 
 /* ---------- 7. 通用导出 / 分页 / 存储 ---------- */
@@ -1651,7 +1754,9 @@ function bindEvents(){
   document.getElementById('reportExportBtn').addEventListener('click',exportReportTable);
   window.addEventListener('resize',resizeAllCharts);
 }
-function init(){
+function initDashboard(){
+  if(state.dashboardInited)return; // 仅初始化一次：所有交互事件在用户登录后绑定
+  state.dashboardInited=true;
   // 默认时间区间与日期输入框初始值
   var today=new Date();
   document.getElementById('dateFrom').value=fmtDate(dayStart(Date.now())-89*DAY_MS);
@@ -1660,11 +1765,266 @@ function init(){
   applyRange('90d'); // 默认近90天，applyRange 内部会 refreshPage 渲染总览
   switchPage('overview');
 }
-window.addEventListener('load',init);
+window.addEventListener('load',function(){
+  bindAuthForms();
+  bootAuth();
+});
+
+/* =========================================================================
+ * 19. 登录/注册 + Firebase Auth 引导 + 管理后台
+ * - 邮箱+密码（Firebase Authentication，Email/Password provider）
+ * - 用户档案存于 Cloud Firestore（users/{uid}）
+ * - 首注册用户自动管理员（由 Cloud Functions onAuthCreate 触发，本地或
+ *   ?emulator=1 模式下由 mock 模拟）
+ * - 管理后台仅管理员可见，可改 role/status（防锁死：禁止对自己降级/禁用）
+ * ========================================================================= */
+var wbApp=null,wbAuth=null,wbDb=null,wbFn=null;
+var wbUser=null;
+var wbUserDocUnsub=null;
+
+function bootAuth(){
+  try{
+    if(typeof firebase==='undefined'){showLogin('无法加载 Firebase SDK，请检查网络后刷新页面');return;}
+    if(!wbApp){
+      wbApp=firebase.initializeApp(window.__WB_FIREBASE_CONFIG__);
+      wbAuth=wbApp.auth();
+      wbDb=wbApp.firestore();
+      wbFn=wbApp.functions();
+      if(window.__WB_USE_EMULATOR__){
+        try{
+          wbAuth.useEmulator('http://localhost:9099');
+          wbDb.useEmulator('localhost',8080);
+          wbFn.useEmulator('localhost',5001);
+        }catch(e){console.warn('emulator connect',e);}
+        document.getElementById('emulatorHint').style.display='block';
+      }
+    }
+    wbAuth.onAuthStateChanged(handleAuth);
+  }catch(e){
+    showLogin('Firebase 初始化失败：'+(e&&e.message||e));
+  }
+}
+function showLogin(errMsg){
+  document.querySelector('.app').style.display='none';
+  document.getElementById('loginView').style.display='flex';
+  if(errMsg)document.getElementById('signinErr').textContent=errMsg;
+}
+function showDashboard(){
+  document.getElementById('loginView').style.display='none';
+  document.querySelector('.app').style.display='flex';
+}
+function switchAuthTab(tab){
+  document.querySelectorAll('.login-tabs span').forEach(function(t){t.classList.toggle('active',t.getAttribute('data-tab')===tab);});
+  document.getElementById('signinForm').style.display=(tab==='signin')?'block':'none';
+  document.getElementById('signupForm').style.display=(tab==='signup')?'block':'none';
+  document.getElementById('signinErr').textContent='';
+  document.getElementById('signupErr').textContent='';
+}
+function pwdBarUpdate(pwd,barEl){
+  if(pwd.length<8){barEl.className='';barEl.style.width='0';return;}
+  barEl.className=pwd.length<10?'mid':'ok';
+}
+function bindAuthForms(){
+  document.getElementById('signinPwd').addEventListener('input',function(e){pwdBarUpdate(e.target.value,document.getElementById('signinPwdBar'));});
+  document.getElementById('signupPwd').addEventListener('input',function(e){pwdBarUpdate(e.target.value,document.getElementById('signupPwdBar'));});
+  document.getElementById('signinBtn').addEventListener('click',doSignIn);
+  document.getElementById('signupBtn').addEventListener('click',doSignUp);
+  document.getElementById('signinPwd').addEventListener('keydown',function(e){if(e.key==='Enter')doSignIn();});
+  document.getElementById('signupPwd').addEventListener('keydown',function(e){if(e.key==='Enter')doSignUp();});
+  document.addEventListener('click',function(e){if(!e.target.closest('.user-menu'))closeUserMenu();});
+}
+function errMsg(e){
+  var code=e&&e.code||'';var map={
+    'auth/user-not-found':'用户不存在，请先注册',
+    'auth/wrong-password':'密码错误',
+    'auth/invalid-email':'邮箱格式不正确',
+    'auth/weak-password':'密码至少 8 位',
+    'auth/email-already-in-use':'该邮箱已注册，请直接登录',
+    'auth/user-disabled':'账号已被禁用',
+    'functions/permission-denied':'需要管理员权限',
+    'functions/not-found':'用户不存在',
+    'functions/internal':'服务器内部错误'
+  };
+  return map[code]||(e&&e.message)||String(e);
+}
+async function doSignIn(){
+  if(!wbAuth){document.getElementById('signinErr').textContent='Firebase 未就绪';return;}
+  var email=document.getElementById('signinEmail').value.trim();
+  var pwd=document.getElementById('signinPwd').value;
+  document.getElementById('signinErr').textContent='';
+  if(!email||!pwd){document.getElementById('signinErr').textContent='请填写邮箱与密码';return;}
+  try{await wbAuth.signInWithEmailAndPassword(email,pwd);}
+  catch(e){document.getElementById('signinErr').textContent=errMsg(e);}
+}
+async function doSignUp(){
+  if(!wbAuth){document.getElementById('signupErr').textContent='Firebase 未就绪';return;}
+  var name=document.getElementById('signupName').value.trim();
+  var email=document.getElementById('signupEmail').value.trim();
+  var pwd=document.getElementById('signupPwd').value;
+  document.getElementById('signupErr').textContent='';
+  if(!name){document.getElementById('signupErr').textContent='请填写显示名称';return;}
+  if(!email||!pwd){document.getElementById('signupErr').textContent='请填写邮箱与密码';return;}
+  if(pwd.length<8){document.getElementById('signupErr').textContent='密码至少 8 位';return;}
+  try{
+    var cred=await wbAuth.createUserWithEmailAndPassword(email,pwd);
+    await cred.user.updateProfile({displayName:name});
+  }catch(e){document.getElementById('signupErr').textContent=errMsg(e);}
+}
+async function doSignOut(){
+  if(!wbAuth)return;
+  try{await wbAuth.signOut();}catch(e){console.warn(e);}
+  if(wbUserDocUnsub){try{wbUserDocUnsub();}catch(e){}wbUserDocUnsub=null;}
+  wbUser=null;
+  document.getElementById('userMenu').style.display='none';
+  // 安全清理：清空密码输入并回到登录 Tab（避免残留上一次注册信息）
+  document.getElementById('signinPwd').value='';
+  document.getElementById('signupPwd').value='';
+  document.getElementById('signupPwdBar').className='';
+  document.getElementById('signinPwdBar').className='';
+  document.getElementById('signinErr').textContent='';
+  document.getElementById('signupErr').textContent='';
+  switchAuthTab('signin');
+}
+function toggleUserMenu(e){if(e)e.stopPropagation();document.getElementById('userDropdown').classList.toggle('open');}
+function closeUserMenu(){document.getElementById('userDropdown').classList.remove('open');}
+function renderUserMenu(){
+  if(!wbUser){document.getElementById('userMenu').style.display='none';return;}
+  document.getElementById('userMenu').style.display='flex';
+  var display=wbUser.displayName||(wbUser.email||'').split('@')[0]||'U';
+  document.getElementById('userName').textContent=display;
+  document.getElementById('userEmail').textContent=wbUser.email||'';
+  document.getElementById('userAvatar').textContent=display.charAt(0).toUpperCase();
+  var tag=document.getElementById('userRoleTag');
+  tag.textContent=wbUser.role==='admin'?'管理员':'普通用户';
+  tag.className='role-tag '+(wbUser.role==='admin'?'admin':'user');
+  var isAdmin=(wbUser.role==='admin');
+  document.getElementById('userAdminLink').style.display=isAdmin?'block':'none';
+  document.getElementById('navAdmin').style.display=isAdmin?'flex':'none';
+  document.getElementById('navAdminGroup').style.display=isAdmin?'block':'none';
+}
+async function fetchUserDoc(uid,retry){
+  retry=retry||0;
+  var snap=await wbDb.collection('users').doc(uid).get();
+  if(snap.exists){return snap.data();}
+  if(retry<30){await new Promise(function(r){setTimeout(r,200);});return fetchUserDoc(uid,retry+1);}
+  throw new Error('未找到用户档案（请确认 Cloud Functions onAuthCreate 已部署）');
+}
+function subscribeUserDoc(uid){
+  if(wbUserDocUnsub){try{wbUserDocUnsub();}catch(e){}wbUserDocUnsub=null;}
+  wbUserDocUnsub=wbDb.collection('users').doc(uid).onSnapshot(function(snap){
+    if(!snap.exists)return;
+    var d=snap.data();if(!d)return;
+    if(d.status==='disabled'&&wbUser){
+      wbUser=null;
+      if(wbUserDocUnsub){try{wbUserDocUnsub();}catch(e){}wbUserDocUnsub=null;}
+      wbAuth.signOut().then(function(){showLogin('您的账号已被管理员禁用');});
+      return;
+    }
+    wbUser=Object.assign({},wbUser,d);
+    renderUserMenu();
+    if(state.page==='admin')renderAdmin();
+  },function(err){console.warn('userDocSnapshot err',err);});
+}
+async function handleAuth(fbUser){
+  if(!fbUser){showLogin('');return;}
+  var email=fbUser.email||'';
+  try{
+    var data=await fetchUserDoc(fbUser.uid);
+    wbUser={uid:fbUser.uid,email:email,displayName:fbUser.displayName||data.displayName||'',role:data.role||'user',status:data.status||'active',createdAt:data.createdAt,lastLoginAt:data.lastLoginAt};
+    if(wbUser.status==='disabled'){await wbAuth.signOut();showLogin('您的账号已被禁用');return;}
+    renderUserMenu();
+    showDashboard();
+    if(!state.dashboardInited){initDashboard();}
+    subscribeUserDoc(fbUser.uid);
+  }catch(e){showLogin(errMsg(e));}
+}
+function renderAdmin(){
+  if(!wbUser){
+    document.getElementById('adminUserCount').textContent='—';
+    document.getElementById('adminTbody').innerHTML='<tr><td colspan="7" class="muted" style="text-align:center;padding:30px">请先登录</td></tr>';
+    return;
+  }
+  if(wbUser.role!=='admin'){
+    document.getElementById('adminUserCount').textContent='—';
+    document.getElementById('adminTbody').innerHTML='<tr><td colspan="7" style="padding:30px;text-align:center"><b style="color:#dc2626">⚠ 无权限</b><br/><span class="muted">仅管理员可访问此页面。</span></td></tr>';
+    return;
+  }
+  wbDb.collection('users').orderBy('createdAt','asc').get().then(function(snap){
+    var rows='',count=0;
+    snap.forEach(function(d){
+      var u=d.data(),id=d.id;count++;
+      var isSelf=(id===wbUser.uid);
+      var role=u.role||'user';
+      var status=u.status||'active';
+      var created=u.createdAt?fmtDT((typeof u.createdAt==='number')?u.createdAt:((u.createdAt.toMillis&&u.createdAt.toMillis())||Date.parse(u.createdAt)||0)):'—';
+      var last=u.lastLoginAt?fmtDT((typeof u.lastLoginAt==='number')?u.lastLoginAt:((u.lastLoginAt.toMillis&&u.lastLoginAt.toMillis())||Date.parse(u.lastLoginAt)||0)):'—';
+      rows+='<tr>'+
+        '<td>'+esc(u.displayName||'—')+'</td>'+
+        '<td>'+esc(u.email||'—')+'</td>'+
+        '<td><span class="role-pill '+role+'">'+(role==='admin'?'管理员':'普通用户')+'</span></td>'+
+        '<td><span class="status-pill '+status+'">'+(status==='active'?'已启用':'已禁用')+'</span></td>'+
+        '<td>'+created+'</td>'+
+        '<td>'+last+'</td>'+
+        '<td>'+
+          (isSelf?'':'<button class="action-btn" onclick="doAdminRole(\''+id+'\',\''+(role==='admin'?'user':'admin')+'\')">'+(role==='admin'?'降为普通用户':'提升为管理员')+'</button>')+
+          '<button class="action-btn '+(status==='active'?'danger':'')+'" '+(isSelf?'disabled title="不能对自己启用/禁用"':'')+' onclick="doAdminStatus(\''+id+'\',\''+(status==='active'?'disabled':'active')+'\')">'+(status==='active'?'禁用':'启用')+'</button>'+
+        '</td></tr>';
+    });
+    document.getElementById('adminUserCount').textContent=count;
+    document.getElementById('adminTbody').innerHTML=rows||'<tr><td colspan="7" class="muted" style="text-align:center;padding:20px">暂无用户</td></tr>';
+  }).catch(function(e){
+    document.getElementById('adminTbody').innerHTML='<tr><td colspan="7" class="muted">加载失败：'+esc(errMsg(e))+'</td></tr>';
+  });
+}
+async function doAdminRole(uid,role){
+  if(uid===wbUser.uid&&role==='user'){alert('不能被降级自己（防锁死）');return;}
+  try{await wbFn.httpsCallable('setUserRole')({uid:uid,role:role});if(state.page==='admin')renderAdmin();}
+  catch(e){alert(errMsg(e));}
+}
+async function doAdminStatus(uid,status){
+  if(uid===wbUser.uid){alert('不能对自己启用/禁用账户');return;}
+  try{await wbDb.collection('users').doc(uid).update({status:status});if(state.page==='admin')renderAdmin();}
+  catch(e){alert(errMsg(e));}
+}
+document.getElementById('adminRefreshBtn').addEventListener('click',renderAdmin);
 </script>
 
     </div>
   </div>
 </div>
+
+<!-- ============ 登录/注册视图（未登录时显示）============ -->
+<div class="login-view" id="loginView" style="display:none">
+  <div class="login-card">
+    <div class="login-logo"><span class="logo-dot"></span><span>WorkBuddy 数据分析平台</span></div>
+    <div class="muted" style="margin:2px 0 0">企业数据分析 · 安全登录</div>
+    <div class="login-tabs">
+      <span class="active" data-tab="signin" onclick="switchAuthTab('signin')">登录</span>
+      <span data-tab="signup" onclick="switchAuthTab('signup')">注册</span>
+    </div>
+    <div class="login-form" id="signinForm">
+      <label>邮箱</label><input type="email" id="signinEmail" placeholder="you@example.com" autocomplete="email">
+      <label>密码</label><input type="password" id="signinPwd" placeholder="至少 8 位" autocomplete="current-password">
+      <div class="pwd-strength"><div id="signinPwdBar"></div></div>
+      <button class="btn" id="signinBtn">登录</button>
+      <div class="login-err" id="signinErr"></div>
+    </div>
+    <div class="login-form" id="signupForm" style="display:none">
+      <label>显示名称</label><input type="text" id="signupName" placeholder="您的姓名">
+      <label>邮箱</label><input type="email" id="signupEmail" placeholder="you@example.com" autocomplete="email">
+      <label>密码</label><input type="password" id="signupPwd" placeholder="至少 8 位，建议字母+数字" autocomplete="new-password">
+      <div class="pwd-strength"><div id="signupPwdBar"></div></div>
+      <div class="muted" style="margin-top:8px;font-size:11px;line-height:1.6">
+        首注册的用户将自动成为「管理员」（由 Cloud Functions onAuthCreate 自动 bootstrap），后续注册的为「普通用户」。
+      </div>
+      <button class="btn" id="signupBtn">注册并登录</button>
+      <div class="login-err" id="signupErr"></div>
+    </div>
+    <div class="muted" id="emulatorHint" style="display:none;margin-top:10px;font-size:11px">
+      ⚙ 已连接到 Firebase 本地模拟器（<code>?emulator=1</code>）
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
