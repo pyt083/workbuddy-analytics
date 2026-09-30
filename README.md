@@ -78,8 +78,52 @@ var DataAdapter = { source: MockDataSource, load: function(){ return this.source
 2. 调用 **任务列表** `GET /openapi/v2/tasks`（建议带分页/增量参数）拉取任务数据，并按上述数据模型做字段映射；
 3. 实现 `ApiDataSource.load()` 返回同结构 `{ users, tasks }`，并把 `DataAdapter.source` 指向 `ApiDataSource`。页面渲染与统计代码无需任何改动，顶部数据源徽标可同步改为「实时数据」。
 
-## 五、质量与自查
+## 五、登录与管理员后台（Firebase）
 
-- 单文件 `index.html`（内联 CSS/JS），无构建依赖；除 ECharts CDN 外不请求任何外部服务，无密钥。
+页面在未登录时会显示一张居中的登录卡片（原 10 页全部隐藏）。登录后才能进入看板；右上角头像下拉包含「管理后台」（仅管理员可见）与「退出登录」。
+
+### 5.1 能力清单
+
+- **邮箱密码注册/登录**（Firebase Authentication，Email/Password provider）
+- **密码强度提示**（≥8 位，<10 位显示中等等级，≥10 位强）
+- **记住会话**：刷新不需重新登录（依赖 Firebase Auth 持久化）
+- **用户档案**（Cloud Firestore `users/{uid}`）：`uid / email / displayName / role(user|admin) / status(active|disabled) / createdAt / lastLoginAt`
+- **首注册用户自动管理员**：由 `functions/onAuthCreate` 在注册事件时检查 users 集合数量是否为 0 → 是则置 `role='admin'`，否则 `role='user'`
+- **管理员后台**（左侧导航数据板块/分析板块之后的「管理」分组，第 11 个页面，仅管理员可见）
+  - 用户列表表格 + 改角色 / 启停账号 + 最后登录时间
+  - **防锁死**：禁止管理员降级自己或禁用自己
+  - **实时联动**：用户被管理员禁用 → 该用户实时监听触发 → 自动退出到登录卡片
+- **Firestore 安全规则**（`firestore.rules`）
+  - 所有登录用户可读自己的 `users/{uid}`；管理员可读所有
+  - 自己只能改 `displayName`；管理员可改 `role / status / displayName`
+  - 其它集合一律 deny
+- **Cloud Functions**（`functions/index.js`）：`onAuthCreate` + callable `setUserRole`
+
+### 5.2 一次性部署
+
+完整步骤见 [`FIREBASE-SETUP.md`](./FIREBASE-SETUP.md)：包括创建 Firebase 项目、开启 Email/Password 与 Firestore、升级 Blaze、`firebase use --add`、`firebase deploy --only firestore:rules,firestore:indexes,functions`、把 `firebaseConfig` 填到 `index.html` `<head>` 占位符中。
+
+### 5.3 本地联调（无真实项目）
+
+仓库自带完整 Firebase CLI 配置（`firebase.json`）。本地装好 `firebase-tools` 后：
+
+```bash
+firebase emulators:start --only auth,firestore,functions --project demo-wb
+# 另开一个终端
+python3 -m http.server 8000
+# 访问 http://localhost:8000/?emulator=1
+```
+
+URL 中的 `?emulator=1` 让客户端 SDK 连接本地 emulator；首注册用户自动成为管理员。详见 [`FIREBASE-TEST.md`](./FIREBASE-TEST.md)。
+
+### 5.4 安全模型
+
+- 客户端永远拿不到 admin SDK；`role`/`status` 字段在 Firestore 规则中受保护，仅管理员可写。
+- Callable `setUserRole` 在函数内部校验 `req.auth.uid` 对应文档的 `role==='admin'`，避免前端绕过规则提权。
+- 用户档案 `create` 权限在规则中设为 `false`，只允许 Cloud Functions（使用 admin SDK）创建，杜绝前端直接伪造首用户。
+
+## 六、质量与自查
+
+- 单文件 `index.html`（内联 CSS/JS），无构建依赖；除 ECharts CDN 与 Firebase compat JS（CDN）外不请求任何外部服务，无密钥（真实 Firebase 配置由用户填入）。
 - 所有 ECharts 容器均有显式高度；隐藏页图表在页面切换时 resize，不存在 0 高度初始化问题。
-- 已用无头浏览器（Playwright/Chromium）实测：加载 10 个页面、组织树下钻与三模式切换、用户/任务筛选与分页、行内详情展开、分类下钻、报表生成/保存/应用、5 种时间筛选、自定义区间、天/周/月粒度切换、窗口 resize——**无 JS 报错、无 console 报错**。
+- 已用无头浏览器（Playwright/Chromium）实测：原 10 个页面、组织树下钻与三模式切换、用户/任务筛选与分页、行内详情展开、分类下钻、报表生成/保存/应用、5 种时间筛选、自定义区间、天/周/月粒度切换、窗口 resize；以及登录/注册、首用户管理员、第二个用户普通、admin 提升/禁用、被禁用账号实时踢出——**无 JS 报错、无 console 报错**。
