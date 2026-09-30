@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ====== 工具函数 ======
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function uid() {
+      return request.auth.uid;
+    }
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+    function isAdmin() {
+      return isSignedIn() && userDoc(uid()).role == 'admin';
+    }
+
+    // ====== 用户档案 ======
+    // 所有登录用户都可读自己的 doc；
+    // 管理员可读所有 user doc；
+    // 自己可改 displayName（不能改 role / status / uid / email）；
+    // 仅管理员可写 role / status（纵深防御：admin 即使登录也禁止改自己的 role/status，
+    // 即使用 isAdmin() && uid() == userId 也仍然拒绝，杜绝客户端 SDK 绕过 callable 防锁死）。
+    match /users/{userId} {
+      allow read: if isSignedIn() && (uid() == userId || isAdmin());
+      allow create: if false; // 仅由 Cloud Functions onAuthCreate 创建
+      allow update: if isSignedIn() && (
+        // 用户自己改 displayName / lastLoginAt（禁止触碰 role/status）
+        (uid() == userId
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['displayName','lastLoginAt']))
+        ||
+        // 管理员改他人的 role / status / displayName / lastLoginAt（不允许改自己）
+        (isAdmin()
+          && uid() != userId
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['role','status','displayName','lastLoginAt']))
+      );
+      allow delete: if false;
+    }
+
+    // ====== 其它集合全部 deny ======
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
