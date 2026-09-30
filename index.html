@@ -87,6 +87,19 @@ body{
   padding:2px 8px;border-radius:10px;font-weight:500;
 }
 .badge-live{font-size:11px;background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;padding:2px 8px;border-radius:10px}
+/* ============ 数据源切换器 ============ */
+.ds-switch{
+  display:flex;align-items:center;border:1px solid var(--border);border-radius:10px;
+  overflow:hidden;font-size:11px;background:#fff;user-select:none;
+}
+.ds-opt{
+  padding:3px 10px;cursor:pointer;color:var(--text-sub);font-weight:500;transition:all .15s;
+  border-right:1px solid var(--border);
+}
+.ds-opt:last-child{border-right:none}
+.ds-opt.mock.active{background:#fef3c7;color:#b45309;font-weight:600}
+.ds-opt.real.active{background:#dcfce7;color:#15803d;font-weight:600}
+.ds-opt.loading{color:#94a3b8;cursor:wait}
 .topbar-filter{margin-left:auto;display:flex;align-items:center;gap:8px}
 .tf-btn{
   padding:5px 12px;border:1px solid var(--border);background:#fff;border-radius:6px;cursor:pointer;
@@ -307,7 +320,10 @@ table.tbl tr.detail-row td{background:#f8fafc;padding:12px 16px;border-bottom:2p
   <div class="main">
     <div class="topbar">
       <span class="platform">WorkBuddy 数据分析平台</span>
-      <span class="badge-mock" id="dataSourceBadge">演示数据（Mock）</span>
+      <div class="ds-switch" id="dsSwitch" title="切换数据源">
+        <span class="ds-opt mock active" data-ds="mock" id="dsOptMock">演示数据 (Mock)</span>
+        <span class="ds-opt real" data-ds="real" id="dsOptReal">我的 WorkBuddy 数据</span>
+      </div>
       <div class="topbar-filter">
         <button class="tf-btn" data-range="today">今天</button>
         <button class="tf-btn" data-range="week">本周</button>
@@ -355,16 +371,32 @@ table.tbl tr.detail-row td{background:#f8fafc;padding:12px 16px;border-bottom:2p
           <div class="card"><div class="card-title">任务量 Top10 个人</div><ol class="rank-list" id="rankUser"></ol></div>
           <div class="card"><div class="card-title">任务量 Top5 类别</div><ol class="rank-list" id="rankCat"></ol></div>
         </div>
-        <div class="hint-card" id="apiGuideCard">
-          <b>API 数据接入指引</b>：当前展示为演示数据（Mock）。后续接入真实数据请通过 <b>WorkBuddy 开放平台 OAuth2.1</b>：先将用户引导至授权端点
-          <code>https://www.workbuddy.cn/openapi/v2/authorize</code> 获取授权码并换取 access_token，再调用
-          <code>GET /openapi/v2/tasks</code> 拉取任务列表。前端已预留 <code>DataAdapter</code> 接口层（见源码中
-          <code>MockDataSource</code>），届时替换为 <code>ApiDataSource</code> 实现即可无缝切换，页面无需改动。
+        <div class="hint-card" id="apiGuideCard" style="display:none">
+          <div id="wbGuideBody">
+            <b>接入我的 WorkBuddy 数据</b><br/>
+            <span class="muted" style="display:block;margin:6px 0;line-height:1.7">
+              ① 点击「去授权」跳转到 WorkBuddy 开放平台授权页（OAuth2.1，scope：用户资料 + 任务列表只读）；<br/>
+              ② 在 WorkBuddy 侧确认授权后，浏览器回跳本站回调页并自动换取访问凭证（token 全程保存在服务端，不会进入浏览器）；<br/>
+              ③ 回到看板后自动加载你的真实任务数据，时间筛选 / 分类分析 / 趋势图全部生效。<br/>
+              <span style="color:#b45309">注意：WorkBuddy 开放 API 暂未开放「对话轮次 / 产物 / 上传资料」维度，接入后这些指标显示为 0 并已标注。</span>
+            </span>
+            <button class="btn" id="wbAuthBtn">去授权</button>
+            <span class="muted" id="wbGuideErr" style="color:#dc2626;margin-left:8px"></span>
+          </div>
+          <div id="wbConnectedBody" style="display:none">
+            <b style="color:#15803d">✓ 已连接 WorkBuddy 开放平台</b>
+            <span class="muted" id="wbConnectedInfo" style="margin-left:8px"></span>
+            <div style="margin-top:8px">
+              <button class="btn btn-ghost" id="wbRefreshBtn">重新拉取任务</button>
+              <button class="btn btn-ghost" id="wbDisconnectBtn" style="color:#dc2626;border-color:#fecaca">断开授权</button>
+            </div>
+          </div>
         </div>
       </section>
 
       <!-- ================= 2. 组织架构视图 ================= -->
       <section class="page" id="page-org">
+        <div class="hint-card" id="apiNoteOrg" style="display:none">⚠ 当前为 WorkBuddy 真实数据源：真实任务仅归属「授权账号」本人，组织树 / 部门 / 岗位 / 业务线维度为占位（「—」）。</div>
         <div class="card">
           <div class="mode-tabs" id="orgModeTabs">
             <span class="tab active" data-mode="org">按组织架构</span>
@@ -498,6 +530,7 @@ table.tbl tr.detail-row td{background:#f8fafc;padding:12px 16px;border-bottom:2p
 
       <!-- ================= 7. 提示词与产物分析 ================= -->
       <section class="page" id="page-prompt">
+        <div class="hint-card" id="apiNotePrompt" style="display:none">⚠ 当前为 WorkBuddy 真实数据源：提示词内容、长度、关键词与产物数据维度 <b>API 暂未开放</b>，以下图表为 0 值占位。</div>
         <div class="grid-2">
           <div class="card"><div class="card-title">提示词长度分布</div><div id="promptHistChart" class="chart"></div></div>
           <div class="card"><div class="card-title">高频关键词 Top15</div><div id="kwBarChart" class="chart"></div></div>
@@ -507,6 +540,7 @@ table.tbl tr.detail-row td{background:#f8fafc;padding:12px 16px;border-bottom:2p
 
       <!-- ================= 8. 多轮对话分析 ================= -->
       <section class="page" id="page-dialogue">
+        <div class="hint-card" id="apiNoteDialogue" style="display:none">⚠ 当前为 WorkBuddy 真实数据源：多轮对话内容与轮次维度 <b>API 暂未开放</b>，以下图表为 0 值占位。</div>
         <div class="grid-3">
           <div class="card"><div class="card-title">对话轮次分布</div><div id="roundDistChart" class="chart-sm"></div></div>
           <div class="card"><div class="card-title">各部门平均轮次</div><div id="deptRoundChart" class="chart-sm"></div></div>
@@ -520,6 +554,7 @@ table.tbl tr.detail-row td{background:#f8fafc;padding:12px 16px;border-bottom:2p
 
       <!-- ================= 9. 上传资料分析 ================= -->
       <section class="page" id="page-upload">
+        <div class="hint-card" id="apiNoteUpload" style="display:none">⚠ 当前为 WorkBuddy 真实数据源：上传资料维度 <b>API 暂未开放</b>，以下图表为 0 值占位。</div>
         <div class="grid-2">
           <div class="card"><div class="card-title">资料类型分布</div><div id="uploadPieChart" class="chart"></div></div>
           <div class="card"><div class="card-title">上传频次 Top10 用户</div><div id="uploadTopChart" class="chart"></div></div>
@@ -751,6 +786,10 @@ function taskNo(idx){return idx<10?'000'+idx:(idx<100?'00'+idx:(idx<1000?'0'+idx
 // 生成某任务的多轮对话记录（惰性生成并缓存，内容由任务 ID 决定，保证稳定）
 function dialogOf(task){
   if(task.dlg)return task.dlg;
+  if(DATA.source==='api'){ // 真实数据源：对话内容 API 暂未开放
+    task.dlg=[{role:'user',text:'（WorkBuddy 开放 API 暂未开放对话内容）'},{role:'ai',text:'如需查看多轮对话明细，请登录 WorkBuddy 客户端查看该任务。'}];
+    return task.dlg;
+  }
   var r=mulberry32(SEED+parseInt(task.id.slice(1))*97);
   var dlgs=[{role:'user',text:task.prompt},{role:'ai',text:'好的，我来帮您处理。以下是根据您的需求生成的内容，请查阅。'}];
   for(var i=1;i<task.rounds;i++){
@@ -763,24 +802,100 @@ function dialogOf(task){
 
 /* ---------- 3. DataAdapter 数据接入层 ---------- */
 /**
- * 数据接入层：页面所有统计均通过 DataAdapter.load() 取数。
- * 当前为 MockDataSource（本地 Mock）。接入真实数据时，实现一个相同接口的
- * ApiDataSource（WorkBuddy 开放平台 OAuth2.1：
- *   授权端点 https://www.workbuddy.cn/openapi/v2/authorize
- *   任务列表 GET /openapi/v2/tasks ）
- * 并替换 DataAdapter.source 即可，页面其余代码无需改动。
+ * 数据接入层：页面所有统计均通过 DataAdapter 取数。
+ * - MockDataSource：本地 Mock（默认），同步 load()。
+ * - ApiDataSource：WorkBuddy 开放平台真实数据（OAuth2.1），
+ *   通过 Cloud Function callable「wbGetMyTasks」服务端代拉
+ *   GET /openapi/v2/tasks（token 全程服务端持有，不进浏览器）。
  */
+
+/* ==== WB-OAUTH-TESTABLE-BEGIN ====（本块为纯函数/常量，供 tests/wb-oauth-mock.js 提取测试） */
+var WB_CLIENT_ID='cb_YipjG5TEevNZFIblffrL'; // 第三方应用 Client ID（可公开）
+var WB_REDIRECT_URI='https://pyt083.github.io/workbuddy-analytics/oauth/callback'; // 必须与开放平台后台登记的重定向 URI 字节级一致
+var WB_SCOPES='user.profile.readable user.task.readable';
+var WB_AUTHORIZE_URL='https://www.workbuddy.cn/openapi/v2/authorize';
+/* 任务标题 → 任务类别（关键词规则，顺序即优先级；默认归入「其他」） */
+var WB_CAT_RULES=[
+  ['PPT制作',   /ppt|幻灯|演示文稿|slides?/i],
+  ['视频生成',  /视频|短片|剪辑|动画|配音|字幕|视频号|video|mv\b/i],
+  ['图片设计',  /图片|海报|插画|logo|图标|banner|封面|图像|修图|配图|长图/i],
+  ['翻译',      /翻译|译成|中译|英译|translate|译文/i],
+  ['代码开发',  /代码|开发|编程|程序|脚本|接口|函数|算法|bug|重构|部署|code|api|sql|python|java|前端|后端|小程序/i],
+  ['数据分析',  /分析|数据|统计|报表|指标|可视化|洞察|同比|环比|excel|表格|画像/i],
+  ['文档写作',  /文档|报告|总结|方案|文章|写作|简历|周报|日报|月报|合同|公文|标书|邮件|通知|说明|文案|纪要|提纲|大纲|docx?|word/i]
+];
+function classifyTaskName(name){
+  var s=String(name||'');
+  for(var i=0;i<WB_CAT_RULES.length;i++){
+    if(WB_CAT_RULES[i][1].test(s))return WB_CAT_RULES[i][0];
+  }
+  return '其他';
+}
+/** 拼接 WorkBuddy 授权页 URL（OAuth2.1 authorization code；state 由调用方生成防 CSRF） */
+function buildWbAuthorizeUrl(state){
+  return WB_AUTHORIZE_URL
+    +'?response_type=code'
+    +'&client_id='+encodeURIComponent(WB_CLIENT_ID)
+    +'&redirect_uri='+encodeURIComponent(WB_REDIRECT_URI)
+    +'&scope='+encodeURIComponent(WB_SCOPES)
+    +'&state='+encodeURIComponent(state);
+}
+/* ==== WB-OAUTH-TESTABLE-END ==== */
+
+/** WorkBuddy 任务状态 → 看板展示状态 */
+function mapApiTaskStatus(s){
+  var v=String(s||'').toLowerCase();
+  if(['completed','complete','finished','done','success','succeeded','已完成'].indexOf(v)>-1)return '已完成';
+  if(['cancelled','canceled','failed','error','abort','closed','已取消','失败'].indexOf(v)>-1)return '已取消';
+  return '进行中';
+}
+
 var MockDataSource={
   name:'演示数据（Mock）',
+  // 惰性缓存：种子只在首次生成时消费，保证「切换回 Mock / 刷新页面」数据完全一致
+  _cache:null,
   load:function(){
-    var users=buildUsers();
-    var tasks=buildTasks(users);
-    return {source:'mock',users:users,tasks:tasks};
+    if(!this._cache){
+      var users=buildUsers();
+      var tasks=buildTasks(users);
+      this._cache={source:'mock',users:users,tasks:tasks};
+    }
+    return this._cache;
   }
 };
-var ApiDataSource={ // 预留占位：未来接入开放平台时实现 load()
-  name:'开放平台数据',
-  load:function(){throw new Error('ApiDataSource 尚未接入：请通过 WorkBuddy 开放平台 OAuth2.1 获取 access_token 后实现 GET /openapi/v2/tasks 拉取');}
+/**
+ * 真实数据源：异步。token 交换/刷新/存储全部在 Cloud Functions 服务端完成，
+ * 浏览器只经 callable wbGetMyTasks 拿到脱敏后的原始 tasks 数组。
+ */
+var ApiDataSource={
+  name:'WorkBuddy 开放平台数据',
+  loadAsync:function(){
+    if(!wbFn||!wbUser)return Promise.reject(new Error('请先登录后再接入 WorkBuddy 数据'));
+    return wbFn.httpsCallable('wbGetMyTasks')().then(function(res){
+      var r=(res&&res.data)||{};
+      var profile=r.profile||{};
+      var nickname=profile.nickname||(wbUser&&wbUser.displayName)||'授权账号';
+      var users=[{empId:'—',name:nickname,dept:'授权账号',sub:'—',position:'—',biz:'—'}];
+      var tasks=(r.tasks||[]).map(function(t){
+        var ts=Date.parse(t.created_at||t.updated_at||'')||0;
+        var title=t.name||t.title||('任务 '+String(t.task_id||t.id||''));
+        return {
+          id:String(t.task_id||t.id||('T'+Math.random().toString(36).slice(2))),
+          title:title,
+          userIdx:0,
+          category:classifyTaskName(title),
+          rounds:0,             // API 暂未开放：对话轮次
+          outputs:[],outCount:0, // API 暂未开放：产物
+          uploads:[],upCount:0,  // API 暂未开放：上传资料
+          prompt:'',promptLen:0,
+          time:ts,
+          day:fmtDate(ts),
+          status:mapApiTaskStatus(t.status)
+        };
+      });
+      return {source:'api',users:users,tasks:tasks,profile:profile,total:(r.total!=null?r.total:tasks.length)};
+    });
+  }
 };
 var DataAdapter={source:MockDataSource,load:function(){return this.source.load();}};
 
@@ -790,6 +905,27 @@ var TASKS=DATA.tasks;
 var POSITIONS=(function(){var m={},a=[];USERS.forEach(function(u){if(!m[u.position]){m[u.position]=1;a.push(u.position);}});return a;})();
 var BIZS=(function(){var m={},a=[];USERS.forEach(function(u){if(!m[u.biz]){m[u.biz]=1;a.push(u.biz);}});return a;})();
 var TASKS_BY_USER=(function(){var m=[],i;for(i=0;i<USERS.length;i++)m[i]=[];TASKS.forEach(function(t){m[t.userIdx].push(t);});return m;})();
+
+/** 把一个数据集应用为当前全局数据（Mock↔真实 切换时调用），并重置翻页/下钻状态 */
+function applyDataset(data){
+  DATA=data;USERS=data.users;TASKS=data.tasks;
+  POSITIONS=(function(){var m={},a=[];USERS.forEach(function(u){if(!m[u.position]){m[u.position]=1;a.push(u.position);}});return a;})();
+  BIZS=(function(){var m={},a=[];USERS.forEach(function(u){if(!m[u.biz]){m[u.biz]=1;a.push(u.biz);}});return a;})();
+  TASKS_BY_USER=(function(){var m=[],i;for(i=0;i<USERS.length;i++)m[i]=[];TASKS.forEach(function(t){m[t.userIdx].push(t);});return m;})();
+  state.userPage=1;state.userOpen=-1;state.taskPage=1;state.taskOpen='';
+  state.taskFilters={dept:'',user:'',cat:'',pos:'',biz:''};
+  state.catDrill=null;state.catDrillPage=1;
+  updateApiNotes();
+  refreshPage();
+}
+/** 真实数据源下，把「API 暂未开放」提示条切换到对应显隐 */
+function updateApiNotes(){
+  var on=(DATA.source==='api');
+  ['apiNoteOrg','apiNotePrompt','apiNoteDialogue','apiNoteUpload'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el)el.style.display=on?'block':'none';
+  });
+}
 
 /* ---------- 4. 全局状态 ---------- */
 var state={
@@ -803,6 +939,8 @@ var state={
   catDrill:null,catDrillPage:1,
   report:{dim:'day',metrics:['tasks'],lastRows:null,lastTitle:''},
   savedReports:[],reportPage:1,
+  dataSource:'mock',   // 'mock' | 'real'
+  wbConnected:null,   // null=未知 true=已连接 false=需授权/已失效
   dashboardInited:false
 };
 
@@ -1843,7 +1981,10 @@ function errMsg(e){
     'auth/user-disabled':'账号已被禁用',
     'functions/permission-denied':'需要管理员权限',
     'functions/not-found':'用户不存在',
-    'functions/internal':'服务器内部错误'
+    'functions/internal':'服务器内部错误',
+    'functions/failed-precondition':'WorkBuddy 授权信息缺失或已失效',
+    'functions/external':'WorkBuddy 开放平台接口调用失败',
+    'functions/invalid-argument':'参数错误'
   };
   return map[code]||(e&&e.message)||String(e);
 }
@@ -1875,6 +2016,11 @@ async function doSignOut(){
   try{await wbAuth.signOut();}catch(e){console.warn(e);}
   if(wbUserDocUnsub){try{wbUserDocUnsub();}catch(e){}wbUserDocUnsub=null;}
   wbUser=null;
+  // 数据源安全：退出登录即回退演示数据（真实数据归属原账号）
+  if(state.dataSource==='real'){
+    state.dataSource='mock';state.wbConnected=null;
+    try{applyDataset(MockDataSource.load());renderApiGuide();renderDsSwitch(false);}catch(e){}
+  }
   document.getElementById('userMenu').style.display='none';
   // 安全清理：清空密码输入并回到登录 Tab（避免残留上一次注册信息）
   document.getElementById('signinPwd').value='';
@@ -1936,6 +2082,10 @@ async function handleAuth(fbUser){
     showDashboard();
     if(!state.dashboardInited){initDashboard();}
     subscribeUserDoc(fbUser.uid);
+    // 数据源偏好恢复：上次选择了真实数据源（授权回跳/刷新）则自动切换
+    try{
+      if(localStorage.getItem(WB_DS_KEY)==='real'){setDataSource('real',true);}
+    }catch(e){}
   }catch(e){showLogin(errMsg(e));}
 }
 function renderAdmin(){
@@ -1987,6 +2137,140 @@ async function doAdminStatus(uid,status){
   catch(e){alert(errMsg(e));}
 }
 document.getElementById('adminRefreshBtn').addEventListener('click',renderAdmin);
+
+/* =========================================================================
+ * 20. WorkBuddy 开放平台真实数据源（Mock / Real 双源切换）
+ * - 顶栏数据源切换：演示数据 (Mock) ⇄ 我的 WorkBuddy 数据
+ * - 未授权时选择真实数据源 → 总览页展示引导卡片（去授权 + 流程说明）
+ * - OAuth2.1：跳授权页带随机 state（sessionStorage 防 CSRF）→ 回调页
+ *   oauth/callback/index.html 调 wbOauthCallback → 回主页自动切真实数据
+ * - token 失效（refresh 也失败）→ callable 返回 failed-precondition → 重新引导授权
+ * - Mock 模式一切保持不变，默认 Mock
+ * ========================================================================= */
+var WB_DS_KEY='wb_data_source'; // localStorage 数据源偏好（mock|real）
+
+function renderDsSwitch(loading){
+  var m=document.getElementById('dsOptMock'),r=document.getElementById('dsOptReal');
+  if(loading){
+    m.className='ds-opt mock';r.className='ds-opt real loading';r.textContent='拉取中…';
+    return;
+  }
+  r.textContent='我的 WorkBuddy 数据';
+  m.className='ds-opt mock'+(state.dataSource==='mock'?' active':'');
+  r.className='ds-opt real'+(state.dataSource==='real'?' active':'');
+}
+/** 渲染总览页的 API 引导卡片（未授权/已连接/加载失败三种形态） */
+function renderApiGuide(){
+  var card=document.getElementById('apiGuideCard');
+  if(!card)return;
+  var guide=document.getElementById('wbGuideBody');
+  var ok=document.getElementById('wbConnectedBody');
+  if(state.dataSource==='real'&&state.wbConnected===true){
+    card.style.display='block';guide.style.display='none';ok.style.display='block';
+    var n=(DATA.profile&&DATA.profile.nickname)||'';
+    document.getElementById('wbConnectedInfo').textContent=
+      (n?('授权账号：'+n+' · '):'')+'已拉取 '+TASKS.length+' 条任务（API 上限 500 条）。';
+  }else if(state.dataSource==='real'){
+    card.style.display='block';guide.style.display='block';ok.style.display='none';
+  }else{
+    card.style.display='none'; // Mock 模式默认不占版面；切换到真实源时再展示
+  }
+}
+/**
+ * 切换数据源。
+ * mock：同步重建 mock 数据集（种子固定，可复现）。
+ * real：异步调 wbGetMyTasks；未授权/token 失效 → 引导卡片 + 回退 mock 展示。
+ */
+function setDataSource(mode,silent){
+  if(mode==='mock'){
+    state.dataSource='mock';
+    try{localStorage.setItem(WB_DS_KEY,'mock');}catch(e){}
+    applyDataset(MockDataSource.load());
+    renderApiGuide();
+    renderDsSwitch(false);
+    return;
+  }
+  // mode==='real'
+  if(!wbUser||!wbFn){if(!silent)alert('请先登录后再接入 WorkBuddy 数据');return;}
+  state.dataSource='real'; // 乐观标记：失败时回退
+  try{localStorage.setItem(WB_DS_KEY,'real');}catch(e){}
+  renderDsSwitch(true);
+  if(!silent)renderApiGuide();
+  ApiDataSource.loadAsync().then(function(dataset){
+    applyDataset(dataset);
+    state.wbConnected=true;
+    renderApiGuide();
+    renderDsSwitch(false);
+    if(!silent&&dataset.tasks.length===0){
+      // 授权成功但该账号暂无任务：提示避免误判为故障
+      var el=document.getElementById('wbConnectedInfo');
+      if(el)el.textContent='已连接，但该 WorkBuddy 账号暂无任务数据。';
+    }
+  }).catch(function(e){
+    state.wbConnected=false;
+    renderDsSwitch(false);
+    var needAuth=(e&&e.code==='functions/failed-precondition');
+    if(needAuth){
+      // 未授权 / token 失效（refresh 也失败）→ 回退 mock 数据 + 引导重新授权
+      state.dataSource='mock';
+      applyDataset(MockDataSource.load());
+      renderApiGuide();
+      // 强制展示引导卡片（即使回退到 mock）
+      var card=document.getElementById('apiGuideCard');
+      if(card){card.style.display='block';
+        var g=document.getElementById('wbGuideBody');
+        if(g)g.style.display='block';
+        var o=document.getElementById('wbConnectedBody');
+        if(o)o.style.display='none';}
+      var errEl=document.getElementById('wbGuideErr');
+      if(errEl)errEl.textContent=errMsg(e)||String(e&&e.message||e);
+      if(!silent)alert((errMsg(e)||'')+'：请在总览页点击「去授权」完成 WorkBuddy 授权。');
+    }else{
+      state.dataSource='mock';
+      applyDataset(MockDataSource.load());
+      renderApiGuide();
+      if(!silent)alert('拉取 WorkBuddy 数据失败：'+(errMsg(e)||String(e&&e.message||e)));
+    }
+    try{localStorage.setItem(WB_DS_KEY,'mock');}catch(e2){}
+  });
+}
+/** 发起 OAuth2.1 授权跳转：随机 state 存 sessionStorage 防 CSRF */
+function startWbAuth(){
+  var stateTok='';
+  var chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  for(var i=0;i<24;i++)stateTok+=chars.charAt(Math.floor(Math.random()*chars.length));
+  try{sessionStorage.setItem('wb_oauth_state',stateTok);}catch(e){}
+  window.location.href=buildWbAuthorizeUrl(stateTok);
+}
+/** 断开授权：删服务端 token 文档，回退 Mock */
+async function wbDisconnectNow(){
+  if(!wbUser||!wbFn){alert('请先登录');return;}
+  if(!confirm('断开后将删除服务端保存的 WorkBuddy 访问凭证，并回退到演示数据。确定断开？'))return;
+  try{await wbFn.httpsCallable('wbDisconnect')();}
+  catch(e){alert('断开失败：'+errMsg(e));return;}
+  state.wbConnected=false;
+  try{localStorage.setItem(WB_DS_KEY,'mock');}catch(e2){}
+  setDataSource('mock',true);
+  alert('已断开 WorkBuddy 授权，回退到演示数据。');
+}
+/* 数据源切换器 / 引导卡片 事件绑定（元素为静态 DOM，顶层脚本可直接绑定） */
+document.getElementById('dsOptMock').addEventListener('click',function(){
+  if(state.dataSource==='mock')return;
+  setDataSource('mock');
+});
+document.getElementById('dsOptReal').addEventListener('click',function(){
+  if(!wbUser){alert('请先登录后再接入 WorkBuddy 数据');return;}
+  if(state.dataSource==='real'&&state.wbConnected===true){ // 已连接：点一次重新拉取
+    setDataSource('real');
+    return;
+  }
+  setDataSource('real');
+});
+document.getElementById('wbAuthBtn').addEventListener('click',startWbAuth);
+document.getElementById('wbDisconnectBtn').addEventListener('click',wbDisconnectNow);
+document.getElementById('wbRefreshBtn').addEventListener('click',function(){
+  if(state.dataSource==='real')setDataSource('real');
+});
 </script>
 
     </div>
