@@ -40,6 +40,14 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ====== WorkBuddy OAuth token 集合 ======
+    // 客户端完全禁止访问（读/写全 deny）：
+    // access_token / refresh_token 全程服务端持有，仅 Cloud Functions（admin SDK，
+    // 天然绕过规则）可读写 /wb_tokens/{open_id}。浏览器侧永远拿不到 token。
+    match /wb_tokens/{docId} {
+      allow read, write: if false;
+    }
+
     // ====== 其它集合全部 deny ======
     match /{document=**} {
       allow read, write: if false;
