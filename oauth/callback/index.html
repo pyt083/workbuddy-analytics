@@ -137,8 +137,10 @@ document.getElementById('backBtn').href=WB_HOME;
   if(window.__WB_USE_EMULATOR__){
     try{auth.useEmulator('http://localhost:9099');fn.useEmulator('localhost',5001);}catch(e){console.warn(e);}
   }
-  // redirect_uri 必须与授权阶段字节级一致：从当前地址还原（线上 = 登记的回调地址）
-  var redirectUri=location.origin+location.pathname;
+  // redirect_uri 必须与授权阶段字节级一致：从当前地址还原。
+  // GitHub Pages 会把 /oauth/callback 301 补斜杠到 /oauth/callback/，
+  // 因此先去掉末尾斜杠再比对，确保与开放平台登记地址字节级一致。
+  var redirectUri=location.origin+location.pathname.replace(/\/+$/,'');
   if(redirectUri!==WB_REDIRECT_URI){
     showDone(false,'回调地址与登记的不一致','当前回调地址 <code>'+redirectUri+'</code> 与开放平台登记的 <code>'+WB_REDIRECT_URI+'</code> 不一致（本地 localhost 无法完成线上授权）。');
     return;
