@@ -1,0 +1,13 @@
+# 严禁入库的本地敏感文件
+wb-secret.txt
+**/wb-secret.txt
+.env
+.env.*
+
+# 依赖与系统文件
+node_modules/
+functions/node_modules/
+.DS_Store
+
+# 扫描/测试临时产物
+.tmp-*
