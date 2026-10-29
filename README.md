@@ -78,9 +78,54 @@
 
 架构：页面统计统一经由 `DataAdapter` 取数，`MockDataSource`（同步）与 `ApiDataSource`（异步经 callable `wbGetMyTasks`）实现同一数据模型 `{ users, tasks }`，切换时 `applyDataset()` 重建全局数据集，页面渲染与统计代码无需感知。接入部署见 [`FIREBASE-SETUP.md`](./FIREBASE-SETUP.md) 第 7 步，验证清单见 [`FIREBASE-TEST.md`](./FIREBASE-TEST.md) D 节。
 
-## 五、登录与管理员后台（Firebase）
+## 五、登录与管理员后台（双轨鉴权：演示模式 / 云端模式）
 
 页面在未登录时会显示一张居中的登录卡片（原 10 页全部隐藏）。登录后才能进入看板；右上角头像下拉包含「管理后台」（仅管理员可见）与「退出登录」。
+
+### 5.0 两种模式与自动切换
+
+看板采用**双轨鉴权**：同一套 `AuthAdapter` 接口（`authRegister / authLogin / authLogout / authGetUser / authListUsers / authSetRole / authSetStatus / onAuthChanged`），两种实现。
+
+页面初始化时读 `index.html` 顶部 `window.__WB_FIREBASE_CONFIG__`，**仅当 `apiKey`、`projectId`、`appId` 三个字段都填了真实值（不是 `YOUR_…` 占位符）** 时才走云端模式；否则自动降级为演示模式。**未部署 Firebase 后端时，站点开箱可用——任何人都能注册、登录、使用管理后台。**
+
+| | 演示模式（local） | 云端模式（firebase） |
+| --- | --- | --- |
+| 触发条件 | `apiKey`/`projectId`/`appId` 任一缺失或仍是 `YOUR_` 占位符 | 三者均为真实值 |
+| 账号存储 | 浏览器 `localStorage`：`wb_local_accounts`（账号表）、`wb_local_session`（当前 uid） | Firebase Authentication + Cloud Firestore `users/{uid}` |
+| 口令 | `SHA-256(salt + password)`（SubtleCrypto），16 位随机 salt，**不存明文**；非安全上下文自动降级为弱哈希并标记 `hashMode='insecure'` | 由 Firebase Authentication 托管 |
+| 首注册用户 | 自动管理员（`role='admin'`），后续为普通用户 | 同左（由 Cloud Functions `onAuthCreate` bootstrap） |
+| 管理后台 | 可见，直接读写本地账号表 | 可见，走 Firestore + callable `setUserRole` |
+| 真实数据源 | 置灰不可用（OAuth 回调与 token 存储依赖 Cloud Functions） | 可用 |
+| 账号有效期 | 仅当前浏览器，换浏览器/清缓存即丢失 | 跨设备持久 |
+
+演示模式的可见标识：登录页黄色横幅「演示模式：账号仅保存在本浏览器…」、顶栏「演示模式」chip、用户菜单「当前模式：演示模式（本机账号）」、管理后台顶部提示条。
+
+**云端不可用时的兜底**：若判定为云端模式但 Firebase SDK 加载失败或初始化抛错，登录页会显示红色错误卡片（说明原因 + 修复指引），并提供「改用演示模式（本地账号）」按钮一键降级——**不会白屏、不会静默失败**。
+
+### 5.0.1 开箱即用的演示账号
+
+演示模式下**首次加载会自动写入一个种子管理员账号**，打开站点即可登录，无需先注册：
+
+| 项 | 值 |
+| --- | --- |
+| 邮箱 | `admin@workbuddy.local` |
+| 密码 | `WorkBuddy@2026` |
+| 角色 | 管理员（`role=admin`，可进入管理后台） |
+
+- 登录卡片内直接展示这组凭据，并有「**一键填入并登录**」按钮；同时保留自助注册入口。
+- 口令与其它本地账号一样走 **16 位随机 salt + `SHA-256(salt|password)`** 存储，浏览器中**没有明文密码**。
+- 种子账号占用「第一个账号」名额，因此**之后自助注册的账号为普通用户**；
+  在管理后台「清空本地演示账号」后**立刻注册**，那个账号才会成为管理员；若改为**刷新页面**，种子账号会重新生成。
+
+> ⚠️ **请务必知悉**：演示账号只存在**当前浏览器**的 localStorage；**任何访问该网址的人都可以使用上面这组公开凭据登录**并查看演示数据（Mock）。请勿在演示模式填写任何真实信息。
+> 一旦在 `index.html` 顶部填入有效的 Firebase 配置，模式自动切为云端，**演示账号立即失效**——云端模式不会创建任何种子账号，只有真实注册的账号可用。
+
+**如何重置**：
+
+1. 管理后台（演示模式）顶部「**清空本地演示账号**」按钮，二次确认后清空 `wb_local_accounts` 与 `wb_local_session` 并回到登录页；
+2. 或右上角头像菜单「**♻ 重置演示账号**」，效果相同。
+
+两者都**只清账号与登录会话**，组织树展开状态、常用报表、数据源偏好等其它 localStorage 数据会保留（确认弹窗中已写明）。
 
 ### 5.1 能力清单
 
@@ -92,7 +137,7 @@
 - **管理员后台**（左侧导航数据板块/分析板块之后的「管理」分组，第 11 个页面，仅管理员可见）
   - 用户列表表格 + 改角色 / 启停账号 + 最后登录时间
   - **防锁死**：禁止管理员降级自己或禁用自己
-  - **实时联动**：用户被管理员禁用 → 该用户实时监听触发 → 自动退出到登录卡片
+  - **实时联动**：用户被管理员禁用 → 该用户实时监听触发 → 自动退出到登录卡片（云端模式走 Firestore `onSnapshot`；演示模式走 `storage` 事件，跨标签页同步踢出）
 - **Firestore 安全规则**（`firestore.rules`）
   - 所有登录用户可读自己的 `users/{uid}`；管理员可读所有
   - 自己只能改 `displayName`；管理员可改 `role / status / displayName`
@@ -127,4 +172,5 @@ URL 中的 `?emulator=1` 让客户端 SDK 连接本地 emulator；首注册用�
 - 单文件 `index.html`（内联 CSS/JS），无构建依赖；除 ECharts CDN 与 Firebase compat JS（CDN）外不请求任何外部服务，无密钥（真实 Firebase 配置由用户填入；WorkBuddy Client Secret 仅存 Firebase Secret Manager，全仓扫描确认未入库）。
 - 所有 ECharts 容器均有显式高度；隐藏页图表在页面切换时 resize，不存在 0 高度初始化问题。
 - 已用无头浏览器（Playwright/Chromium）实测：原 10 个页面、组织树下钻与三模式切换、用户/任务筛选与分页、行内详情展开、分类下钻、报表生成/保存/应用、5 种时间筛选、自定义区间、天/周/月粒度切换、窗口 resize；以及登录/注册、首用户管理员、第二个用户普通、admin 提升/禁用、被禁用账号实时踢出——**无 JS 报错、无 console 报错**。
+- 双轨鉴权 + 演示账号 E2E `tests/e2e-dual-auth.py`（96 项断言，真实本地 `http.server` + 占位配置 / 假合法配置两个站点）：种子管理员自动写入且口令为 salt+SHA-256 无明文、一键登录即管理员、注册第二账号为普通用户、四种报错、刷新会话保持、管理员提权/禁用/启用、被禁账号登录被拒、跨标签页在线踢出、防锁死、10 页 + 时间筛选 + CSV + 保存报表回归、真实数据源置灰拦截、清空演示账号后「刷新→种子重生 / 立刻注册→首个为管理员」两条分支；云端模式 SDK 缺失 / 初始化失败均显示友好错误卡片、不白屏、**不创建种子账号**、一键降级可用——全部 PASS。内联 JS 语法用 `tests/extract-inline-js.py` 抽取后 `node --check` 通过。
 - Open API 接入逻辑单测 `tests/wb-oauth-mock.js`（55 项断言：authorize URL 字节级 redirect_uri 一致、换 token 表单字段、classifyTaskName 18 样本、扫描逻辑自检）全部 PASS；真实 Client Secret 泄漏扫描用 `tests/secret-scan.js`（secret 从环境变量 `WB_SCAN_SECRET` 或 `~/wb-secret.txt` 读取，仓库内零 secret），最近实测全仓（含 git 历史）CLEAN；真实 API 线上验证清单见 `FIREBASE-TEST.md` D 节。
