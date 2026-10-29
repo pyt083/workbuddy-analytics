@@ -14,11 +14,34 @@ WorkBuddy 数据分析平台 — Firebase 登录/管理后台端到端验证
 """
 
 from playwright.sync_api import sync_playwright
+import glob, os, pathlib
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent  # 仓库根目录
+
+# Chromium 启动兜底：优先用 playwright 自带安装；不可用时（下载受限）复用本机缓存版本
+def _cached_chromium():
+    pats = [
+        os.path.expanduser('~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'),
+        os.path.expanduser('~/.cache/ms-playwright/chromium-*/chrome-linux/chrome'),
+    ]
+    for pat in pats:
+        hits = sorted(glob.glob(pat), reverse=True)
+        if hits: return hits[0]
+    return None
+
+def launch_chromium(p):
+    try:
+        return p.chromium.launch()
+    except Exception:
+        exe = _cached_chromium()
+        if not exe: raise
+        print('  [INFO] 使用本机缓存 Chromium:', exe)
+        return p.chromium.launch(executable_path=exe)
 
 errors, console_errs = [], []
 
 with sync_playwright() as p:
-    b = p.chromium.launch()
+    b = launch_chromium(p)
     ctx = b.new_context(viewport={'width':1440,'height':900})
     # 仅阻断 Firebase CDN（让 mock 接管），其它 CDN（如 jsdelivr ECharts）正常加载
     def maybe_abort(route, request):
@@ -29,7 +52,7 @@ with sync_playwright() as p:
             route.continue_()
     ctx.route('**/*', maybe_abort)
     # 注入 mock 在所有脚本之前
-    with open('tests/firebase-mock.js', encoding='utf-8') as f:
+    with open(os.path.join(ROOT, 'tests/firebase-mock.js'), encoding='utf-8') as f:
         ctx.add_init_script(f.read())
 
     pg = ctx.new_page()
@@ -44,8 +67,7 @@ with sync_playwright() as p:
         console_errs.append(text)
     pg.on('console', on_console)
 
-    import pathlib
-    URL = pathlib.Path('index.html').resolve().as_uri()
+    URL = (ROOT / 'index.html').as_uri()
     pg.goto(URL)
     pg.wait_for_timeout(2500)
 
@@ -160,6 +182,91 @@ with sync_playwright() as p:
 
     pg.evaluate("switchPage('admin')"); pg.wait_for_timeout(500)
     print('  [INFO] admin rows =', pg.eval_on_selector_all('#adminTbody tr','e=>e.length'))
+
+    # ================= WorkBuddy 数据源（真实 Open API mock 路径）=================
+    print('=== 12) 未授权态点「我的 WorkBuddy 数据」→ 引导卡片 + 回退 Mock ===')
+    pg.evaluate("__WB_FAKE__.wbState.mode='noauth'")
+    mock_task_count = pg.evaluate('TASKS.length')
+    assert_true('mock 数据量 > 100（基线）', mock_task_count > 100)
+    pg.evaluate("switchPage('overview')"); pg.wait_for_timeout(300)
+    pg.click('#dsOptReal'); pg.wait_for_timeout(1200)
+    assert_true('回退 Mock（DATA.source=mock）', pg.evaluate("DATA.source") == 'mock')
+    assert_true('引导卡片出现', pg.eval_on_selector('#apiGuideCard','e=>getComputedStyle(e).display!=="none"'))
+    assert_true('去授权按钮可见', pg.eval_on_selector('#wbAuthBtn','e=>getComputedStyle(e).display!=="none"'))
+    assert_true('引导卡片错误提示非空', len(pg.text_content('#wbGuideErr').strip()) > 0)
+    assert_true('数据源偏好回写 mock', pg.evaluate("localStorage.getItem('wb_data_source')") == 'mock')
+
+    print('=== 13) 已授权态：切换到真实数据源 ===')
+    pg.evaluate("__WB_FAKE__.wbState.mode='ok'")
+    pg.click('#dsOptReal'); pg.wait_for_timeout(1500)
+    assert_true('DATA.source=api', pg.evaluate("DATA.source") == 'api')
+    assert_true('任务数 = mock 提供的 8 条', pg.evaluate('TASKS.length') == 8)
+    assert_true('切换器高亮 real', 'active' in (pg.get_attribute('#dsOptReal','class') or ''))
+    assert_true('引导卡片显示已连接', '已连接' in (pg.text_content('#wbConnectedBody') or ''))
+    assert_true('用户=授权账号（部门）', pg.evaluate("USERS[0].dept") == '授权账号')
+    assert_true('昵称=WorkBuddy测试账号', pg.evaluate("USERS[0].name") == 'WorkBuddy测试账号')
+    assert_true('classifyTaskName 生效（验收报告→文档写作）', pg.evaluate("TASKS[0].category") == '文档写作')
+    assert_true('classifyTaskName 生效（可视化分析→数据分析）', pg.evaluate("TASKS[1].category") == '数据分析')
+    assert_true('API 任务状态映射（completed→已完成）', pg.evaluate("TASKS[0].status") == '已完成')
+    assert_true('rounds/outCount/upCount 置 0', pg.evaluate("TASKS.every(t=>t.rounds===0&&t.outCount===0&&t.upCount===0)"))
+    # 时间筛选对真实数据生效
+    pg.evaluate("applyRange('90d')"); pg.wait_for_timeout(300)
+    assert_true('近90天筛选后仍 8 条', pg.evaluate('getFilteredTasks().length') == 8)
+    # 任务明细页显示真实任务 + 「API 暂未开放」提示条
+    pg.evaluate("switchPage('tasks')"); pg.wait_for_timeout(400)
+    task_text = pg.text_content('#taskTbody')
+    assert_true('任务表含真实任务 ID', 'wb_1000' in task_text)
+    assert_true('任务表含真实任务标题', '起草一份项目验收报告' in task_text)
+    # 提示词页：API 暂未开放提示条
+    pg.evaluate("switchPage('prompt')"); pg.wait_for_timeout(400)
+    assert_true('prompt 页 API 提示条可见', pg.eval_on_selector('#apiNotePrompt','e=>getComputedStyle(e).display!=="none"'))
+    pg.evaluate("switchPage('dialogue')"); pg.wait_for_timeout(300)
+    assert_true('dialogue 页 API 提示条可见', pg.eval_on_selector('#apiNoteDialogue','e=>getComputedStyle(e).display!=="none"'))
+    pg.evaluate("switchPage('upload')"); pg.wait_for_timeout(300)
+    assert_true('upload 页 API 提示条可见', pg.eval_on_selector('#apiNoteUpload','e=>getComputedStyle(e).display!=="none"'))
+    # 对话占位
+    assert_true('dialogOf 返回占位文案', '暂未开放' in pg.evaluate("dialogOf(TASKS[0]).map(d=>d.text).join(' ')"))
+    # 真实数据下导出 CSV
+    pg.evaluate("switchPage('users')"); pg.wait_for_timeout(400)
+    try:
+        with pg.expect_download(timeout=4000) as dl2:
+            pg.evaluate("exportUsers()")
+        print('  [PASS] 真实数据源导出 CSV:', dl2.value.suggested_filename)
+    except Exception as e:
+        print('  [FAIL] exportUsers(api):', e)
+        errors.append(('export','exportUsers(api)'))
+    assert_true('数据源偏好 = real', pg.evaluate("localStorage.getItem('wb_data_source')") == 'real')
+
+    print('=== 14) 切回演示数据 → Mock 完整恢复 ===')
+    pg.click('#dsOptMock'); pg.wait_for_timeout(800)
+    assert_true('DATA.source=mock', pg.evaluate("DATA.source") == 'mock')
+    assert_true('任务数恢复 Mock 基线', pg.evaluate('TASKS.length') == mock_task_count)
+    assert_true('API 提示条隐藏', pg.eval_on_selector('#apiNotePrompt','e=>getComputedStyle(e).display==="none"'))
+    assert_true('数据源偏好 = mock', pg.evaluate("localStorage.getItem('wb_data_source')") == 'mock')
+
+    print('=== 15) 真实源下注销 → 自动回退 Mock；回调页防护 ===')
+    pg.click('#dsOptReal'); pg.wait_for_timeout(1200)
+    assert_true('回到真实源', pg.evaluate("DATA.source") == 'api')
+    pg.evaluate("doSignOut()"); pg.wait_for_timeout(900)
+    assert_true('注销后回退 Mock', pg.evaluate("DATA.source") == 'mock')
+    assert_true('注销后回登录页', pg.eval_on_selector('#loginView','e=>getComputedStyle(e).display!=="none"'))
+
+    # oauth/callback/index.html：无 code / state 不匹配 两条防护路径（file:// 下 mock 已注入）
+    cb_uri = (ROOT / 'oauth/callback/index.html').as_uri()
+    cb1 = ctx.new_page()
+    cb1.on('pageerror', lambda e: errors.append(('cb-pageerror', str(e))))
+    def on_console_cb(m):
+        if m.type != 'error': return
+        t = m.text
+        if 'ERR_FAILED' in t or 'Failed to load resource' in t or 'gstatic' in t or 'firebaseio' in t: return
+        console_errs.append('[callback] '+t)
+    cb1.on('console', on_console_cb)
+    cb1.goto(cb_uri); cb1.wait_for_timeout(800)
+    assert_true('回调页：无 code → 提示缺少授权码', '缺少授权码' in (cb1.text_content('#main') or ''))
+    cb1.goto(cb_uri + '?code=abc123&state=xyz'); cb1.wait_for_timeout(800)
+    assert_true('回调页：state 不匹配 → 校验失败', 'state 校验失败' in (cb1.text_content('#main') or ''))
+    assert_true('回调页：展示重新授权/返回按钮', cb1.eval_on_selector('#actions','e=>getComputedStyle(e).display!=="none"'))
+    cb1.close()
 
     b.close()
 
