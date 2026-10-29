@@ -165,7 +165,94 @@ OVERALL: PASS
 
 ---
 
-## C. 本次未覆盖 / 已知限制
+## C. WorkBuddy Open API 接入逻辑单测（已执行，55/55 PASS）
+
+真实 API 无法在本地测（Client Secret 仅存于 Firebase Secret Manager、生产 token 需用户在 WorkBuddy 侧亲自授权），因此**纯逻辑部分**用单元测试固化，**在线行为**列入 D 节清单由用户线上核对。
+
+```bash
+cd /Users/donson/WorkBuddy/2026-09-29-23-19-56/workbuddy-analytics
+node tests/wb-oauth-mock.js
+```
+
+覆盖 55 项断言：
+
+- **authorize URL 拼接**：`redirect_uri` 与登记地址字节级一致（原始 URL 中 `:` `/` 均被 URL 编码）、`response_type=code`、`client_id`、`scope=user.profile.readable user.task.readable`、`state` 随机值原样往返
+- **回调页一致性**：`oauth/callback/index.html` 的 `WB_REDIRECT_URI` 与主页/服务端一致；state 校验、`localStorage wb_data_source=real`、跳回主页（绝对路径 `/workbuddy-analytics/`，不依赖相对层级）逻辑均在
+- **wbOauthCallback 换 token 表单**：5 字段齐全（`grant_type=authorization_code` + `code` + `client_id` + `client_secret` + `redirect_uri`），`client_secret` 由调用方传入（代码不硬编码）；表单体 `application/x-www-form-urlencoded` round-trip 无损
+- **refresh 分支**：`grant_type=refresh_token` + `refresh_token` + `client_id` + `client_secret` 字段正确
+- **classifyTaskName**：18 个样本覆盖 7 个类别（文档写作/数据分析/PPT制作/代码开发/翻译/图片设计/视频生成）+ 默认「其他」
+- **mapWbStatus**：completed/done→已完成，cancelled/failed→已取消，running/空→进行中
+- **扫描逻辑自检（不含真实 secret）**：仓库测试只用**假 secret** 验证扫描器可用（造临时泄漏文件必须被检出→清理后全仓 clean）；真实 secret 的扫描见下节
+
+实测输出尾部：`总计: 55 项，失败: 0 / OVERALL: PASS`
+
+### C.1 真实 Client Secret 泄漏扫描（本地工具，仓库内零 secret）
+
+仓库内**不包含**任何真实 secret 片段（2026-09-30 P1-1 修复：此前测试文件以分段字面量内置 secret，已彻底移除）。对真实 secret 的全仓扫描用 `tests/secret-scan.js`，secret 从**仓库外**读取：
+
+```bash
+# 方式一：环境变量
+WB_SCAN_SECRET='YOUR_CLIENT_SECRET' node tests/secret-scan.js
+
+# 方式二：home 目录文件（单行，勿加引号；在仓库外，已被 .gitignore 双保险排除）
+echo 'YOUR_CLIENT_SECRET' > ~/wb-secret.txt
+node tests/secret-scan.js
+```
+
+扫描形态（与 QA v3 同口径）：明文 / 小写 / 大写 / 反转 / base64 / base64 去填充 / 反转后 base64 / hex / hex 大写 × 完整 secret + 前后半段（部分泄漏也能检出）；范围覆盖**工作区全部文件 + git 历史所有 blob**。
+
+最近一次实测（2026-09-30，修复 P1-1 后）：`SECRET SCAN: CLEAN (0 hits across all variants)`，工作区 23 文件 + git 3 blobs 全部干净。同口径的 `qa/secret-scan-v3.py`（已改为同样的外部读取方式）结果一致 CLEAN。
+
+---
+
+## D. 真实 Open API 线上验证清单（需用户执行后核对）
+
+> 本节无法在本地自动化：Client Secret 只在 Firebase Secret Manager（`firebase functions:secrets:set WB_CLIENT_SECRET`），且授权必须由真实 WorkBuddy 账号在 `https://www.workbuddy.cn` 侧确认。部署完成后按下面顺序核对，逐项打勾。
+
+### D.0 前置
+
+- [ ] `firebase deploy --only functions,firestore:rules` 成功，输出包含 `wbOauthCallback` / `wbGetMyTasks` / `wbDisconnect`
+- [ ] `firebase functions:secrets:set WB_CLIENT_SECRET` 已录入（值为 WorkBuddy 第三方应用的 Client Secret）
+- [ ] WorkBuddy 开放平台后台：重定向 URI 为 `https://pyt083.github.io/workbuddy-analytics/oauth/callback`
+- [ ] `oauth/callback/index.html` 的 `window.__WB_FIREBASE_CONFIG__` 已填（与主页同一份配置）
+- [ ] Firebase Auth → Authorized domains 已含 `pyt083.github.io`
+
+### D.1 授权流程
+
+- [ ] 登录看板 → 顶栏点「我的 WorkBuddy 数据」→ 总览页出现引导卡片（流程说明 + 「去授权」按钮）
+- [ ] 点「去授权」→ 跳转到 `https://www.workbuddy.cn/openapi/v2/authorize?...`，地址栏可见 `client_id=cb_YipjG5TEevNZFIblffrL`、`redirect_uri=https%3A%2F%2Fpyt083.github.io%2Fworkbuddy-analytics%2Foauth%2Fcallback`、`scope=user.profile.readable%20user.task.readable`、随机 `state`
+- [ ] WorkBuddy 侧确认授权 → 回跳 `https://pyt083.github.io/workbuddy-analytics/oauth/callback?code=...&state=...` → 显示「授权成功，正在返回看板」
+- [ ] 自动回到看板 → 顶栏数据源高亮「我的 WorkBuddy 数据」→ 总览指标卡显示真实任务数
+
+### D.2 token 服务端持有（安全验证）
+
+- [ ] 浏览器 DevTools → Application → Local Storage：**没有** access_token / refresh_token（只有 `wb_data_source=real`）
+- [ ] Firestore 控制台：`wb_tokens/{open_id}` 文档存在（含 uid 关联、expiresAt、profile），`users/{uid}` 多了 `wbOpenId` 字段
+- [ ] 浏览器控制台执行 `firebase.firestore().collection('wb_tokens').get()` → **被规则拒绝**（Permission denied）
+
+### D.3 真实数据展示
+
+- [ ] 任务明细页：显示真实 task_id / 标题 / 状态；「对话轮次 / 产物数」列为 0
+- [ ] 任务分类分析 / 趋势图 / 时间筛选（今天/本周/本月/近90天/自定义）对真实数据生效
+- [ ] 提示词 / 多轮对话 / 上传资料三页顶部出现「API 暂未开放」黄色提示条
+- [ ] 组织架构页顶部出现「真实任务仅归属授权账号」提示条；用户=授权账号自己（部门「授权账号」，岗位/业务线「—」）
+- [ ] 导出 CSV（任务明细）正常，包含真实任务数据
+
+### D.4 token 刷新与失效
+
+- [ ] 等 access_token 过 1 小时（或 Firestore 里把 `expiresAt` 改小）→ 再点一次「我的 WorkBuddy 数据」/「重新拉取任务」→ 自动刷新成功，无需重新授权
+- [ ] 在 WorkBuddy 侧撤销授权（或把 `wb_tokens` 文档的 `refreshToken` 改为无效值）→ 拉取时弹「授权信息缺失或已失效」→ 总览页引导卡片重新出现
+
+### D.5 断开与注销
+
+- [ ] 引导卡片「断开授权」→ 确认 → 回退演示数据；Firestore `wb_tokens` 文档已删、`users/{uid}.wbOpenId` 已清
+- [ ] 注销登录 → 数据源自动回退「演示数据」；重新登录后若 localStorage 偏好为 mock 则保持演示数据
+- [ ] Mock 模式全流程（原 10 页 + 登录/管理员后台）与接入前完全一致（本节 + B 路径已自动化验证）
+
+---
+
+## E. 本次未覆盖 / 已知限制
 
 - **未在 CI 中自动跑 Emulator**：仓库未提交 GitHub Actions 工作流；`qa/` 下两个 QA 脚本可直接套进 CI。
 - **密码找回、邮箱验证、第三方登录**：本次需求未要求，未实现。
+- **真实 Open API 行为**：见 D 节，需线上由用户执行核对。
