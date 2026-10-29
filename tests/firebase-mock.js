@@ -154,10 +154,67 @@
           fireDoc(data.uid, users[data.uid]);
           return Promise.resolve({ data: { ok: true, uid: data.uid, role: data.role } });
         }
+        // ===== WorkBuddy Open API 数据源（wbGetMyTasks / wbOauthCallback / wbDisconnect）=====
+        if(name === 'wbGetMyTasks'){
+          if(!currentUser) return Promise.reject(err('functions/unauthenticated', '未登录'));
+          if(wbState.mode === 'noauth')
+            return Promise.reject(err('functions/failed-precondition', '尚未授权 WorkBuddy 数据源，请先完成 OAuth 授权'));
+          if(wbState.mode === 'fail')
+            return Promise.reject(err('functions/external', 'WorkBuddy 开放平台接口调用失败'));
+          return Promise.resolve({
+            data: {
+              source: 'api',
+              tasks: wbState.tasks.slice(),
+              total: wbState.tasks.length,
+              openId: 'op_test_123',
+              profile: { nickname: wbState.nickname, avatar: '' }
+            }
+          });
+        }
+        if(name === 'wbOauthCallback'){
+          if(!currentUser) return Promise.reject(err('functions/unauthenticated', '未登录'));
+          if(!data || !data.code) return Promise.reject(err('functions/invalid-argument', '缺少授权码 code'));
+          if(data.redirectUri !== 'https://pyt083.github.io/workbuddy-analytics/oauth/callback')
+            return Promise.reject(err('functions/invalid-argument', 'redirectUri 与登记的回调地址不一致'));
+          return Promise.resolve({ data: { openId: 'op_test_123', nickname: wbState.nickname } });
+        }
+        if(name === 'wbDisconnect'){
+          if(!currentUser) return Promise.reject(err('functions/unauthenticated', '未登录'));
+          return Promise.resolve({ data: { ok: true } });
+        }
         return Promise.reject(err('functions/unimplemented', 'not implemented: '+name));
       };
     },
     useEmulator: function(){ /* no-op */ }
+  };
+
+  // ===== WorkBuddy 数据源测试状态（e2e 可通过 __WB_FAKE__ 切换）=====
+  var wbState = {
+    mode: 'ok',          // 'ok' | 'noauth'（failed-precondition）| 'fail'（external）
+    nickname: 'WorkBuddy测试账号',
+    tasks: (function(){
+      var out = [], now = Date.now();
+      var samples = [
+        ['起草一份项目验收报告', 'completed'],
+        ['统计上季度销售数据并做可视化分析', 'completed'],
+        ['帮我修复这个 Python 接口的 bug', 'running'],
+        ['生成一张活动宣传海报', 'completed'],
+        ['把这篇调研文章做成 PPT', 'completed'],
+        ['写一个爬虫脚本抓取数据', 'failed'],
+        ['翻译这段合同条款', 'completed'],
+        ['随便聊聊今天的心情', 'running']
+      ];
+      for(var i = 0; i < samples.length; i++){
+        out.push({
+          task_id: 'wb_' + (1000 + i),
+          name: samples[i][0],
+          status: samples[i][1],
+          created_at: new Date(now - i * 36e5).toISOString(), // 每条隔 1 小时
+          updated_at: new Date(now - i * 36e5).toISOString()
+        });
+      }
+      return out;
+    })()
   };
 
   window.firebase = {
@@ -177,6 +234,7 @@
   window.__WB_FAKE__ = {
     get users(){ return users; },
     get order(){ return order; },
+    get wbState(){ return wbState; }, // WorkBuddy 数据源测试状态（mode/tasks/nickname）
     setUserStatus: function(uid, st){
       if(!users[uid]) return;
       users[uid].status = st;
