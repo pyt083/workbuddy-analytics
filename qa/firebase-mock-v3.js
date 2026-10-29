@@ -15,6 +15,25 @@
   if (window.__V3MOCK__) return;
   window.__V3MOCK__ = true;
 
+  /* 【双轨鉴权兼容补丁 / software-engineer】index.html §21 引入模式判定后，
+   * 占位配置会让页面走「演示模式(local)」，云端流程不再执行。
+   * 本 mock 用于验证「云端模式」，故在页面脚本之前把配置锁成格式合法的值：
+   * 不可写 + 不可配置 → index.html 中的占位配置赋值（非严格模式）静默失败。
+   * 仅影响测试注入，不改动被测试页面逻辑。 */
+  try {
+    Object.defineProperty(window, '__WB_FIREBASE_CONFIG__', {
+      configurable: false, writable: false, enumerable: true,
+      value: {
+        apiKey: 'AIzaSyV3MOCKKEYFORTESTINGONLY00000000000',
+        authDomain: 'v3-mock-project.firebaseapp.com',
+        projectId: 'v3-mock-project',
+        storageBucket: 'v3-mock-project.appspot.com',
+        messagingSenderId: '000000000000',
+        appId: '1:000000000000:web:v3mockabcdef0000'
+      }
+    });
+  } catch (e) {}
+
   var CALLS = [];
   window.__V3CALLS__ = CALLS;
 
