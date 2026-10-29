@@ -81,7 +81,63 @@ Firebase Auth 会拒绝不在白名单里的域名发起登录。
 
 如果想本地联调，可以跳到 `FIREBASE-TEST.md` 用 Firebase Emulator Suite 跑同样流程，无需真实 Firebase 项目。
 
-## 7. 故障排查
+## 7. WorkBuddy Open API 接入（真实数据源）
+
+看板支持「演示数据 (Mock) / 我的 WorkBuddy 数据」双数据源。接入真实数据需要部署 3 个新的 Cloud Functions（`wbOauthCallback` / `wbGetMyTasks` / `wbDisconnect`），并把 Client Secret 存入 Firebase Secret Manager。
+
+### 7.1 录入 Client Secret（严禁写进任何仓库文件）
+
+```bash
+cd /Users/donson/WorkBuddy/2026-09-29-23-19-56/workbuddy-analytics
+firebase functions:secrets:set WB_CLIENT_SECRET
+# 按提示粘贴 WorkBuddy 第三方应用的 Client Secret（文档示例一律用 YOUR_CLIENT_SECRET 占位）
+```
+
+代码中只引用 Secret 变量名（`functions/index.js` 里 `defineSecret('WB_CLIENT_SECRET')`），值只存在 Firebase Secret Manager 中。
+
+### 7.2 部署新函数与规则
+
+```bash
+cd functions && npm install && cd ..
+firebase deploy --only functions,firestore:rules
+# 部署输出应包含 wbOauthCallback、wbGetMyTasks、wbDisconnect、onAuthCreate、setUserRole
+```
+
+> 首次给函数挂 Secret 时，CLI 可能要求授权 Secret Manager 服务账号访问该 Secret，按提示执行输出的 gcloud 命令即可（或 `firebase functions:secrets:grantaccess WB_CLIENT_SECRET`）。
+
+### 7.3 核对第三方应用配置
+
+在 WorkBuddy 开放平台后台核对（用户已创建好第三方应用）：
+
+- **Client ID**：`cb_YipjG5TEevNZFIblffrL`（已写入前端代码，可公开）
+- **重定向 URI**：`https://pyt083.github.io/workbuddy-analytics/oauth/callback`
+  - 必须与代码中 `WB_REDIRECT_URI`（`index.html`、`oauth/callback/index.html`、`functions/index.js` 三处）**字节级一致**
+  - 该地址对应仓库静态文件 `oauth/callback/index.html`（GitHub Pages 路径 `/workbuddy-analytics/oauth/callback`）
+- **权限范围（scope）**：`user.profile.readable user.task.readable`
+
+### 7.4 填写回调页 Firebase 配置
+
+`oauth/callback/index.html` head 中同样有 `window.__WB_FIREBASE_CONFIG__` 占位块，**填入与 `index.html` 相同的六项配置**（回调页需要以当前登录用户身份调用 callable）。
+
+### 7.5 线上验证流程
+
+1. 打开看板 → 登录 → 顶栏点「我的 WorkBuddy 数据」→ 总览页出现引导卡片 → 点「去授权」
+2. 跳到 WorkBuddy 授权页 → 确认授权 → 自动回跳 `/workbuddy-analytics/oauth/callback` → 显示「授权成功」
+3. 自动回到看板并加载真实任务数据（顶栏数据源高亮「我的 WorkBuddy 数据」）
+4. 时间筛选 / 分类分析 / 趋势图对真实数据同样生效；「对话轮次 / 产物 / 上传资料」显示为 0 并有「API 暂未开放」标注
+5. 断开授权：总览页引导卡片 →「断开授权」→ 服务端删除 token 文档，回退 Mock
+
+详细验证清单见 `FIREBASE-TEST.md`「D. 真实 Open API 线上验证清单」。
+
+### 7.6 Token 安全模型（速查）
+
+- access_token / refresh_token **全程只在 Cloud Functions 服务端**：交换、刷新、存储均不经过浏览器
+- token 存 Firestore `/wb_tokens/{open_id}`（含关联的 firebase uid），`firestore.rules` 对该集合**客户端完全 deny**
+- 浏览器只拿到 `open_id` + 昵称等非敏感信息
+- access_token 1 小时有效；`wbGetMyTasks` 会在过期前 60 秒自动用 refresh_token 刷新并回写
+- refresh 也失败（用户在 WorkBuddy 侧撤销授权）→ callable 返回 `failed-precondition` → 前端引导重新授权
+
+## 8. 故障排查
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
@@ -90,3 +146,8 @@ Firebase Auth 会拒绝不在白名单里的域名发起登录。
 | 普通用户看到管理后台 | Firestore 规则没部署 | `firebase deploy --only firestore:rules` |
 | 管理员被禁用没被踢出 | Firestore 实时监听未启用 | 浏览器控制台应能看到 `userDocSnapshot err` 警告；通常因为 Firestore 区域与 SDK 不匹配 |
 | GitHub Pages 上登录返回 `auth/unauthorized-domain` | 域名未加白名单 | 见 §5 |
+| 点「去授权」跳转后 WorkBuddy 报 redirect_uri 不匹配 | 回调地址与登记不一致 | 三处 `WB_REDIRECT_URI` 必须与开放平台后台登记的完全一致（见 §7.3） |
+| 回调页报 `state 校验失败` | 发起授权与回调不在同一浏览器会话 | 回到看板重新点「去授权」（state 存 sessionStorage，正常流程不会触发） |
+| 拉数据报 `functions/external` | WorkBuddy 接口不可达 / Client Secret 错误 | `firebase functions:secrets:set WB_CLIENT_SECRET` 重录；检查函数日志 `firebase functions:log` |
+| 拉数据报 `failed-precondition` | 未授权 / 用户撤销授权 / refresh 失败 | 正常引导：重新点「去授权」 |
+| 回调页报「请先登录看板账号」 | 回调时 Firebase 会话不存在 | 先回看板登录，再重新发起授权 |
