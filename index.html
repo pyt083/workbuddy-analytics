@@ -100,6 +100,37 @@ body{
 .ds-opt.mock.active{background:#fef3c7;color:#b45309;font-weight:600}
 .ds-opt.real.active{background:#dcfce7;color:#15803d;font-weight:600}
 .ds-opt.loading{color:#94a3b8;cursor:wait}
+.ds-opt.disabled{color:#cbd5e1;cursor:not-allowed;background:#f8fafc}
+.ds-opt.disabled:hover{color:#cbd5e1}
+/* ============ 演示模式 / 错误提示 ============ */
+.mode-chip{
+  font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;
+  padding:2px 8px;border-radius:10px;font-weight:600;cursor:default;
+}
+.mode-banner{
+  background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:8px;
+  padding:9px 12px;font-size:12px;line-height:1.7;margin-bottom:12px;
+}
+.mode-banner code{background:#fff;padding:1px 5px;border-radius:4px;font-size:11px}
+.mode-banner.danger{background:#fef2f2;border-color:#fecaca;color:#991b1b}
+.mode-banner.danger code{background:#fff5f5}
+.mode-banner .actions{margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.demo-cred{
+  background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:8px;
+  padding:10px 12px;font-size:12px;line-height:1.7;margin-bottom:12px;text-align:left;
+}
+.demo-cred code{background:#fff;padding:1px 5px;border-radius:4px;font-size:11px;font-weight:600}
+.demo-cred .actions{margin-top:8px;text-align:center}
+.demo-cred .warn{color:#b45309}
+.btn-danger{background:#fff;border-color:#fecaca;color:#dc2626}
+.btn-danger:hover{background:#dc2626;border-color:#dc2626;color:#fff}
+.err-card{
+  background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:8px;
+  padding:12px;font-size:12px;line-height:1.7;margin-bottom:12px;text-align:left;
+}
+.err-card .body{margin-top:6px;color:#b91c1c;word-break:break-all}
+.err-card .actions{margin-top:10px;text-align:center}
+.user-mode{font-size:11px;color:#64748b;margin-top:4px}
 .topbar-filter{margin-left:auto;display:flex;align-items:center;gap:8px}
 .tf-btn{
   padding:5px 12px;border:1px solid var(--border);background:#fff;border-radius:6px;cursor:pointer;
@@ -324,6 +355,7 @@ table.tbl tr.detail-row td{background:#f8fafc;padding:12px 16px;border-bottom:2p
         <span class="ds-opt mock active" data-ds="mock" id="dsOptMock">演示数据 (Mock)</span>
         <span class="ds-opt real" data-ds="real" id="dsOptReal">我的 WorkBuddy 数据</span>
       </div>
+      <span class="mode-chip" id="modeChip" style="display:none" title="">演示模式</span>
       <div class="topbar-filter">
         <button class="tf-btn" data-range="today">今天</button>
         <button class="tf-btn" data-range="week">本周</button>
@@ -342,11 +374,13 @@ table.tbl tr.detail-row td{background:#f8fafc;padding:12px 16px;border-bottom:2p
           <span class="muted" style="font-size:10px">▾</span>
         </div>
         <div class="user-dropdown" id="userDropdown">
-          <div class="user-info">
-            <div class="mail" id="userEmail">--</div>
-            <span class="role-tag admin" id="userRoleTag">--</span>
-          </div>
+        <div class="user-info">
+          <div class="mail" id="userEmail">--</div>
+          <span class="role-tag admin" id="userRoleTag">--</span>
+          <div class="user-mode" id="userMode">--</div>
+        </div>
           <a href="javascript:void(0)" id="userAdminLink" style="display:none" onclick="closeUserMenu();switchPage('admin')">⚙ 管理后台</a>
+          <a href="javascript:void(0)" id="userResetDemoLink" style="display:none" onclick="closeUserMenu();resetDemoAccounts()">♻ 重置演示账号</a>
           <a href="javascript:void(0)" onclick="closeUserMenu();doSignOut()">⎋ 退出登录</a>
         </div>
       </div>
@@ -604,6 +638,19 @@ table.tbl tr.detail-row td{background:#f8fafc;padding:12px 16px;border-bottom:2p
 
       <!-- ================= 11. 管理后台（仅管理员可见）================= -->
       <section class="page" id="page-admin">
+        <div class="mode-banner" id="adminLocalNote" style="display:none">
+          ⚠ <b>演示模式</b>：当前账号数据仅保存在<b>本浏览器 localStorage</b>（<code>wb_local_accounts</code>），
+          换浏览器、隐私模式或清理站点数据都会丢失，也不会与其它设备同步。配置 Firebase 后自动切换为真实多用户账号体系。
+        </div>
+        <div class="mode-banner danger" id="adminLocalActions" style="display:none">
+          <div><b>演示账号</b>：<code>admin@workbuddy.local</code> / <code>WorkBuddy@2026</code>。
+            任何访问本网址的人都能用这组凭据登录并看到演示数据（Mock），请勿在此存放真实信息。
+            接入 Firebase 后演示账号自动失效。</div>
+          <div class="actions">
+            <button class="btn btn-danger" id="adminResetBtn">清空本地演示账号</button>
+            <span class="muted" style="font-size:11px">清空后刷新会重新生成种子管理员账号；若先清空再注册，第一个注册的账号自动成为管理员。</span>
+          </div>
+        </div>
         <div class="card">
           <div class="card-title">用户管理
             <span class="sub">共 <b id="adminUserCount">0</b> 位用户</span>
@@ -941,7 +988,9 @@ var state={
   savedReports:[],reportPage:1,
   dataSource:'mock',   // 'mock' | 'real'
   wbConnected:null,   // null=未知 true=已连接 false=需授权/已失效
-  dashboardInited:false
+  dashboardInited:false,
+  authMode:'unknown',  // 'local'（演示模式，账号存 localStorage）| 'firebase'（云端多用户）
+  localKickBound:false // 演示模式跨标签页踢出监听是否已绑定（防重复）
 };
 
 /* ---------- 5. 时间筛选与过滤聚合 ---------- */
@@ -1921,8 +1970,18 @@ var wbUser=null;
 var wbUserDocUnsub=null;
 
 function bootAuth(){
+  // 双轨鉴权：先判定模式（local 演示模式 / firebase 云端模式）
+  state.authMode=detectAuthMode();
+  renderAuthModeUI();
+  if(state.authMode==='local'){bootLocalAuth();return;}
+  bootFirebaseAuth();
+}
+/** 云端（Firebase）模式初始化：沿用原有逻辑 */
+function bootFirebaseAuth(){
   try{
-    if(typeof firebase==='undefined'){showLogin('无法加载 Firebase SDK，请检查网络后刷新页面');return;}
+    if(typeof firebase==='undefined'){
+      showLogin('');showFirebaseErrorCard('无法加载 Firebase SDK（可能是网络或 CDN 被拦截），请检查网络后刷新页面。');return;
+    }
     if(!wbApp){
       wbApp=firebase.initializeApp(window.__WB_FIREBASE_CONFIG__);
       wbAuth=wbApp.auth();
@@ -1939,8 +1998,21 @@ function bootAuth(){
     }
     wbAuth.onAuthStateChanged(handleAuth);
   }catch(e){
-    showLogin('Firebase 初始化失败：'+(e&&e.message||e));
+    showLogin('');
+    showFirebaseErrorCard('Firebase 初始化失败：'+(e&&e.message||e));
   }
+}
+/** 演示模式（local）：先补种子管理员（若账号表为空），再恢复会话 */
+function bootLocalAuth(){
+  LocalAuth.ensureSeed().then(function(){
+    var u=LocalAuth.restoreSession();
+    if(u){handleAuthReady(u);}
+    else{showLogin('');}
+    bindLocalKick(); // 跨标签页同步（仅绑定一次）
+  },function(e){
+    console.warn('ensureSeed failed',e);
+    showLogin(''); // 种子失败也不白屏：仍可用自助注册
+  });
 }
 function showLogin(errMsg){
   document.querySelector('.app').style.display='none';
@@ -1963,6 +2035,7 @@ function pwdBarUpdate(pwd,barEl){
   barEl.className=pwd.length<10?'mid':'ok';
 }
 function bindAuthForms(){
+  bindLocalModeButtons(); // 登录视图 DOM 在脚本之后，统一在 load 后绑定
   document.getElementById('signinPwd').addEventListener('input',function(e){pwdBarUpdate(e.target.value,document.getElementById('signinPwdBar'));});
   document.getElementById('signupPwd').addEventListener('input',function(e){pwdBarUpdate(e.target.value,document.getElementById('signupPwdBar'));});
   document.getElementById('signinBtn').addEventListener('click',doSignIn);
@@ -1984,38 +2057,52 @@ function errMsg(e){
     'functions/internal':'服务器内部错误',
     'functions/failed-precondition':'WorkBuddy 授权信息缺失或已失效',
     'functions/external':'WorkBuddy 开放平台接口调用失败',
-    'functions/invalid-argument':'参数错误'
+    'functions/invalid-argument':'参数错误',
+    // 演示模式（本地账号）错误码，与 Firebase 版语义保持一致
+    'local/invalid-email':'邮箱格式不正确',
+    'local/weak-password':'密码至少 8 位',
+    'local/email-already-in-use':'该邮箱已注册，请直接登录',
+    'local/user-not-found':'用户不存在，请先注册',
+    'local/wrong-password':'密码错误',
+    'local/user-disabled':'账号已被禁用',
+    'local/permission-denied':'需要管理员权限',
+    'local/not-found':'用户不存在',
+    'local/failed-precondition':'操作被拒绝（防锁死）'
   };
   return map[code]||(e&&e.message)||String(e);
 }
 async function doSignIn(){
-  if(!wbAuth){document.getElementById('signinErr').textContent='Firebase 未就绪';return;}
   var email=document.getElementById('signinEmail').value.trim();
   var pwd=document.getElementById('signinPwd').value;
   document.getElementById('signinErr').textContent='';
   if(!email||!pwd){document.getElementById('signinErr').textContent='请填写邮箱与密码';return;}
-  try{await wbAuth.signInWithEmailAndPassword(email,pwd);}
-  catch(e){document.getElementById('signinErr').textContent=errMsg(e);}
+  try{
+    await AuthAdapter.login(email,pwd);
+  }catch(e){
+    document.getElementById('signinErr').textContent=errMsg(e);
+  }
 }
 async function doSignUp(){
-  if(!wbAuth){document.getElementById('signupErr').textContent='Firebase 未就绪';return;}
   var name=document.getElementById('signupName').value.trim();
   var email=document.getElementById('signupEmail').value.trim();
   var pwd=document.getElementById('signupPwd').value;
   document.getElementById('signupErr').textContent='';
   if(!name){document.getElementById('signupErr').textContent='请填写显示名称';return;}
   if(!email||!pwd){document.getElementById('signupErr').textContent='请填写邮箱与密码';return;}
+  if(!isValidEmail(email)){document.getElementById('signupErr').textContent='邮箱格式不正确';return;}
   if(pwd.length<8){document.getElementById('signupErr').textContent='密码至少 8 位';return;}
   try{
-    var cred=await wbAuth.createUserWithEmailAndPassword(email,pwd);
-    await cred.user.updateProfile({displayName:name});
-  }catch(e){document.getElementById('signupErr').textContent=errMsg(e);}
+    await AuthAdapter.register(email,pwd,name);
+  }catch(e){
+    document.getElementById('signupErr').textContent=errMsg(e);
+  }
 }
 async function doSignOut(){
-  if(!wbAuth)return;
-  try{await wbAuth.signOut();}catch(e){console.warn(e);}
+  try{await AuthAdapter.logout();}catch(e){console.warn(e);}
   if(wbUserDocUnsub){try{wbUserDocUnsub();}catch(e){}wbUserDocUnsub=null;}
   wbUser=null;
+  // 演示模式没有 onAuthStateChanged 驱动，必须显式回到登录视图
+  if(state.authMode==='local')showLogin('');
   // 数据源安全：退出登录即回退演示数据（真实数据归属原账号）
   if(state.dataSource==='real'){
     state.dataSource='mock';state.wbConnected=null;
@@ -2047,6 +2134,7 @@ function renderUserMenu(){
   document.getElementById('userAdminLink').style.display=isAdmin?'block':'none';
   document.getElementById('navAdmin').style.display=isAdmin?'flex':'none';
   document.getElementById('navAdminGroup').style.display=isAdmin?'block':'none';
+  document.getElementById('userMode').textContent=(state.authMode==='local')?'当前模式：演示模式（本机账号）':'当前模式：云端模式（Firebase）';
 }
 async function fetchUserDoc(uid,retry){
   retry=retry||0;
@@ -2076,17 +2164,22 @@ async function handleAuth(fbUser){
   var email=fbUser.email||'';
   try{
     var data=await fetchUserDoc(fbUser.uid);
-    wbUser={uid:fbUser.uid,email:email,displayName:fbUser.displayName||data.displayName||'',role:data.role||'user',status:data.status||'active',createdAt:data.createdAt,lastLoginAt:data.lastLoginAt};
-    if(wbUser.status==='disabled'){await wbAuth.signOut();showLogin('您的账号已被禁用');return;}
-    renderUserMenu();
-    showDashboard();
-    if(!state.dashboardInited){initDashboard();}
+    var user={uid:fbUser.uid,email:email,displayName:fbUser.displayName||data.displayName||'',role:data.role||'user',status:data.status||'active',createdAt:data.createdAt,lastLoginAt:data.lastLoginAt};
+    if(user.status==='disabled'){await wbAuth.signOut();showLogin('您的账号已被禁用');return;}
+    enterDashboard(user);
     subscribeUserDoc(fbUser.uid);
-    // 数据源偏好恢复：上次选择了真实数据源（授权回跳/刷新）则自动切换
-    try{
-      if(localStorage.getItem(WB_DS_KEY)==='real'){setDataSource('real',true);}
-    }catch(e){}
-  }catch(e){showLogin(errMsg(e));}
+  }catch(e){showLogin('');showFirebaseErrorCard(errMsg(e));}
+}
+/** 进入看板（双轨共用）：设置当前用户、绑定一次事件、恢复数据源偏好 */
+function enterDashboard(user){
+  wbUser=user;
+  renderUserMenu();
+  showDashboard();
+  if(!state.dashboardInited){initDashboard();}
+  // 数据源偏好恢复：上次选择了真实数据源（授权回跳/刷新）则自动切换
+  try{
+    if(localStorage.getItem(WB_DS_KEY)==='real'){setDataSource('real',true);}
+  }catch(e){}
 }
 function renderAdmin(){
   if(!wbUser){
@@ -2099,41 +2192,54 @@ function renderAdmin(){
     document.getElementById('adminTbody').innerHTML='<tr><td colspan="7" style="padding:30px;text-align:center"><b style="color:#dc2626">⚠ 无权限</b><br/><span class="muted">仅管理员可访问此页面。</span></td></tr>';
     return;
   }
+  // 演示模式：直接读取本地账号表；云端模式：读 Firestore users 集合
+  if(state.authMode==='local'){
+    renderAdminRows(LocalAuth.listUsers().map(function(u){
+      return {uid:u.uid,email:u.email,displayName:u.name,role:u.role,status:u.status,createdAt:u.createdAt,lastLoginAt:u.lastLoginAt};
+    }));
+    return;
+  }
   wbDb.collection('users').orderBy('createdAt','asc').get().then(function(snap){
-    var rows='',count=0;
-    snap.forEach(function(d){
-      var u=d.data(),id=d.id;count++;
-      var isSelf=(id===wbUser.uid);
-      var role=u.role||'user';
-      var status=u.status||'active';
-      var created=u.createdAt?fmtDT((typeof u.createdAt==='number')?u.createdAt:((u.createdAt.toMillis&&u.createdAt.toMillis())||Date.parse(u.createdAt)||0)):'—';
-      var last=u.lastLoginAt?fmtDT((typeof u.lastLoginAt==='number')?u.lastLoginAt:((u.lastLoginAt.toMillis&&u.lastLoginAt.toMillis())||Date.parse(u.lastLoginAt)||0)):'—';
-      rows+='<tr>'+
-        '<td>'+esc(u.displayName||'—')+'</td>'+
-        '<td>'+esc(u.email||'—')+'</td>'+
-        '<td><span class="role-pill '+role+'">'+(role==='admin'?'管理员':'普通用户')+'</span></td>'+
-        '<td><span class="status-pill '+status+'">'+(status==='active'?'已启用':'已禁用')+'</span></td>'+
-        '<td>'+created+'</td>'+
-        '<td>'+last+'</td>'+
-        '<td>'+
-          (isSelf?'':'<button class="action-btn" onclick="doAdminRole(\''+id+'\',\''+(role==='admin'?'user':'admin')+'\')">'+(role==='admin'?'降为普通用户':'提升为管理员')+'</button>')+
-          '<button class="action-btn '+(status==='active'?'danger':'')+'" '+(isSelf?'disabled title="不能对自己启用/禁用"':'')+' onclick="doAdminStatus(\''+id+'\',\''+(status==='active'?'disabled':'active')+'\')">'+(status==='active'?'禁用':'启用')+'</button>'+
-        '</td></tr>';
-    });
-    document.getElementById('adminUserCount').textContent=count;
-    document.getElementById('adminTbody').innerHTML=rows||'<tr><td colspan="7" class="muted" style="text-align:center;padding:20px">暂无用户</td></tr>';
+    var rows=[];
+    snap.forEach(function(d){var u=d.data();rows.push({uid:d.id,email:u.email,displayName:u.displayName,role:u.role,status:u.status,createdAt:u.createdAt,lastLoginAt:u.lastLoginAt});});
+    renderAdminRows(rows);
   }).catch(function(e){
     document.getElementById('adminTbody').innerHTML='<tr><td colspan="7" class="muted">加载失败：'+esc(errMsg(e))+'</td></tr>';
   });
 }
+/** 管理后台表格渲染（双轨共用同一份行渲染逻辑） */
+function renderAdminRows(users){
+  var rows='',count=0;
+  for(var i=0;i<users.length;i++){
+    var u=users[i],id=u.uid;count++;
+    var isSelf=(id===wbUser.uid);
+    var role=u.role||'user';
+    var status=u.status||'active';
+    var created=u.createdAt?fmtDT((typeof u.createdAt==='number')?u.createdAt:((u.createdAt.toMillis&&u.createdAt.toMillis())||Date.parse(u.createdAt)||0)):'—';
+    var last=u.lastLoginAt?fmtDT((typeof u.lastLoginAt==='number')?u.lastLoginAt:((u.lastLoginAt.toMillis&&u.lastLoginAt.toMillis())||Date.parse(u.lastLoginAt)||0)):'—';
+    rows+='<tr>'+
+      '<td>'+esc(u.displayName||'—')+'</td>'+
+      '<td>'+esc(u.email||'—')+'</td>'+
+      '<td><span class="role-pill '+role+'">'+(role==='admin'?'管理员':'普通用户')+'</span></td>'+
+      '<td><span class="status-pill '+status+'">'+(status==='active'?'已启用':'已禁用')+'</span></td>'+
+      '<td>'+created+'</td>'+
+      '<td>'+last+'</td>'+
+      '<td>'+
+        (isSelf?'':'<button class="action-btn" onclick="doAdminRole(\''+id+'\',\''+(role==='admin'?'user':'admin')+'\')">'+(role==='admin'?'降为普通用户':'提升为管理员')+'</button>')+
+        '<button class="action-btn '+(status==='active'?'danger':'')+'" '+(isSelf?'disabled title="不能对自己启用/禁用"':'')+' onclick="doAdminStatus(\''+id+'\',\''+(status==='active'?'disabled':'active')+'\')">'+(status==='active'?'禁用':'启用')+'</button>'+
+      '</td></tr>';
+  }
+  document.getElementById('adminUserCount').textContent=count;
+  document.getElementById('adminTbody').innerHTML=rows||'<tr><td colspan="7" class="muted" style="text-align:center;padding:20px">暂无用户</td></tr>';
+}
 async function doAdminRole(uid,role){
   if(uid===wbUser.uid&&role==='user'){alert('不能被降级自己（防锁死）');return;}
-  try{await wbFn.httpsCallable('setUserRole')({uid:uid,role:role});if(state.page==='admin')renderAdmin();}
+  try{await AuthAdapter.setRole(uid,role);if(state.page==='admin')renderAdmin();}
   catch(e){alert(errMsg(e));}
 }
 async function doAdminStatus(uid,status){
   if(uid===wbUser.uid){alert('不能对自己启用/禁用账户');return;}
-  try{await wbDb.collection('users').doc(uid).update({status:status});if(state.page==='admin')renderAdmin();}
+  try{await AuthAdapter.setStatus(uid,status);if(state.page==='admin')renderAdmin();}
   catch(e){alert(errMsg(e));}
 }
 document.getElementById('adminRefreshBtn').addEventListener('click',renderAdmin);
@@ -2182,6 +2288,11 @@ function renderApiGuide(){
  * real：异步调 wbGetMyTasks；未授权/token 失效 → 引导卡片 + 回退 mock 展示。
  */
 function setDataSource(mode,silent){
+  // 演示模式没有 Cloud Functions（OAuth 回调与 token 存储都依赖它），真实数据源不可用
+  if(mode==='real'&&state.authMode==='local'){
+    if(!silent)alert('演示模式不支持 WorkBuddy 真实数据：需先配置 Firebase 并部署 functions/rules。');
+    return;
+  }
   if(mode==='mock'){
     state.dataSource='mock';
     try{localStorage.setItem(WB_DS_KEY,'mock');}catch(e){}
@@ -2259,6 +2370,7 @@ document.getElementById('dsOptMock').addEventListener('click',function(){
   setDataSource('mock');
 });
 document.getElementById('dsOptReal').addEventListener('click',function(){
+  if(state.authMode==='local'){alert('演示模式下不可用：WorkBuddy 真实数据需要 Firebase Cloud Functions（OAuth 回调与 token 存储）。请先在 index.html 中填写有效的 __WB_FIREBASE_CONFIG__ 并部署 functions/rules。');return;}
   if(!wbUser){alert('请先登录后再接入 WorkBuddy 数据');return;}
   if(state.dataSource==='real'&&state.wbConnected===true){ // 已连接：点一次重新拉取
     setDataSource('real');
@@ -2271,6 +2383,389 @@ document.getElementById('wbDisconnectBtn').addEventListener('click',wbDisconnect
 document.getElementById('wbRefreshBtn').addEventListener('click',function(){
   if(state.dataSource==='real')setDataSource('real');
 });
+/** 绑定演示模式相关按钮：云端降级、一键登录、清空账号
+ *  注意：登录视图的 DOM 在脚本之后，统一放到 load 后绑定。 */
+function bindLocalModeButtons(){
+  var btn=document.getElementById('useLocalDemoBtn');
+  if(btn)btn.addEventListener('click',function(){
+    try{sessionStorage.setItem('wb_force_local','1');}catch(e){}
+    document.getElementById('firebaseErrCard').style.display='none';
+    document.getElementById('signinErr').textContent='';
+    document.getElementById('signupErr').textContent='';
+    state.authMode='local';
+    renderAuthModeUI();
+    bootLocalAuth();
+  });
+  var demoBtn=document.getElementById('demoLoginBtn');
+  if(demoBtn)demoBtn.addEventListener('click',demoLoginNow);
+  var resetBtn=document.getElementById('adminResetBtn');
+  if(resetBtn)resetBtn.addEventListener('click',resetDemoAccounts);
+}
+/** 一键用预置演示管理员登录 */
+function demoLoginNow(){
+  var email=LocalAuth.SEED_EMAIL,pwd=LocalAuth.SEED_PWD;
+  document.getElementById('signinEmail').value=email;
+  document.getElementById('signinPwd').value=pwd;
+  pwdBarUpdate(pwd,document.getElementById('signinPwdBar'));
+  switchAuthTab('signin');
+  doSignIn();
+}
+/**
+ * 清空本地演示账号（仅清账号表与会话，保留组织树展开状态、常用报表等其它偏好）。
+ * 清空后刷新页面会重新生成种子管理员账号，避免用户把自己锁在外面。
+ */
+function resetDemoAccounts(){
+  if(state.authMode!=='local'){alert('仅演示模式可重置本地账号。');return;}
+  var ok=confirm(
+    '将清空本浏览器保存的全部演示账号（wb_local_accounts）与当前登录会话。\n\n'+
+    '· 组织树展开状态、常用报表等其它偏好：保留\n'+
+    '· 清空后立刻注册 → 第一个注册的账号自动成为管理员\n'+
+    '· 清空后刷新页面 → 重新生成种子管理员账号\n'+
+    '  admin@workbuddy.local / WorkBuddy@2026\n\n'+
+    '确定继续？');
+  if(!ok)return;
+  try{
+    localStorage.removeItem(LocalAuth.KEY_ACCOUNTS);
+    localStorage.removeItem(LocalAuth.KEY_SESSION);
+  }catch(e){}
+  // 不自动刷新：让用户可以选择「立刻注册成为管理员」或「刷新拿回种子账号」
+  if(wbUserDocUnsub){try{wbUserDocUnsub();}catch(e){}wbUserDocUnsub=null;}
+  wbUser=null;
+  document.getElementById('userMenu').style.display='none';
+  switchAuthTab('signin');
+  showLogin('已清空本地演示账号：现在注册的账号将成为管理员；刷新页面则会重新生成种子演示账号。');
+}
+
+/* =========================================================================
+ * 21. 双轨鉴权：演示模式（local） / 云端模式（Firebase）
+ *
+ * 背景：站点默认托管在 GitHub Pages，Firebase 后端未部署时（index.html 顶部
+ * __WB_FIREBASE_CONFIG__ 仍为占位符）用户无法注册。此处实现「无后端也能用」：
+ *   - 占位配置 / SDK 不可用 → 演示模式：账号存 localStorage，语义与云端版一致
+ *   - 配置有效 → 云端模式：走原有 Firebase Auth + Firestore + Cloud Functions
+ * 两种模式对外暴露同一套接口（AuthAdapter），上层代码零分支感知。
+ * ========================================================================= */
+
+/** 判断某个字段是否仍是占位值 */
+function isPlaceholderValue(v){
+  if(typeof v!=='string')return true;          // undefined / 非字符串一律视为未配置
+  var s=v.trim();
+  return s===''||s.indexOf('YOUR_')===0||s==='YOUR_API_KEY'||s==='YOUR_PROJECT_ID'||s==='YOUR_APP_ID';
+}
+/** 模式判定：local（演示）| firebase（云端） */
+function detectAuthMode(){
+  try{
+    if(sessionStorage.getItem('wb_force_local')==='1')return 'local'; // 用户手动降级
+  }catch(e){}
+  var cfg=window.__WB_FIREBASE_CONFIG__;
+  if(!cfg)return 'local';
+  if(isPlaceholderValue(cfg.apiKey)||isPlaceholderValue(cfg.projectId)||isPlaceholderValue(cfg.appId))return 'local';
+  return 'firebase';
+}
+/** 邮箱格式校验（与 Firebase 版口径一致） */
+function isValidEmail(email){
+  return typeof email==='string'&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+/** 云端模式报错时的友好错误卡片（替代静默失败/白屏） */
+function showFirebaseErrorCard(msg){
+  var card=document.getElementById('firebaseErrCard');
+  if(!card)return;
+  document.getElementById('firebaseErrBody').innerHTML=
+    esc(msg||'未知错误')+
+    '<br/>可能原因：尚未按 <code>FIREBASE-SETUP.md</code> 部署 Auth/Firestore/Functions，'+
+    '或 <code>index.html</code> 顶部的 <code>__WB_FIREBASE_CONFIG__</code> 仍是占位符、项目未启用 Email/Password 登录。'+
+    '<br/>你也可以点击下方按钮改用「演示模式」，立即开始体验看板。';
+  card.style.display='block';
+}
+/** 渲染各处的模式提示 UI（登录页横幅 / 顶栏 chip / 管理后台提示 / 数据源置灰） */
+function renderAuthModeUI(){
+  var local=(state.authMode==='local');
+  var loginBanner=document.getElementById('loginLocalBanner');
+  if(loginBanner)loginBanner.style.display=local?'block':'none';
+  var chip=document.getElementById('modeChip');
+  if(chip){
+    chip.style.display=local?'inline-block':'none';
+    chip.textContent='演示模式';
+    chip.setAttribute('title','账号仅保存在本浏览器 localStorage（wb_local_accounts），换浏览器或清缓存会丢失。配置 Firebase 后自动切换为真实多用户账号体系。');
+  }
+  var adminNote=document.getElementById('adminLocalNote');
+  if(adminNote)adminNote.style.display=local?'block':'none';
+  var adminActions=document.getElementById('adminLocalActions');
+  if(adminActions)adminActions.style.display=local?'block':'none';
+  // 登录页演示账号凭据卡 / 用户菜单重置入口：仅演示模式可见
+  var cred=document.getElementById('demoCredBox');
+  if(cred)cred.style.display=local?'block':'none';
+  var resetLink=document.getElementById('userResetDemoLink');
+  if(resetLink)resetLink.style.display=local?'block':'none';
+  var realOpt=document.getElementById('dsOptReal');
+  if(realOpt){
+    if(local){
+      realOpt.classList.add('disabled');
+      realOpt.setAttribute('title','演示模式不可用：WorkBuddy 真实数据需先配置 Firebase（OAuth 回调依赖 Cloud Functions）');
+    }else{
+      realOpt.classList.remove('disabled');
+      realOpt.setAttribute('title','');
+    }
+  }
+  var hint=document.getElementById('signupHintText');
+  if(hint){
+    hint.innerHTML=local
+      ? '演示模式：<b>首位注册的用户自动成为「管理员」</b>，其后注册的为「普通用户」。账号保存在本浏览器，仅用于功能体验。'
+      : '首注册的用户将自动成为「管理员」（由 Cloud Functions onAuthCreate 自动 bootstrap），后续注册的为「普通用户」。';
+  }
+}
+
+/* ---------- 本地演示模式账号存储 ---------- */
+var LocalAuth={
+  KEY_ACCOUNTS:'wb_local_accounts',
+  KEY_SESSION:'wb_local_session',
+  /* 预置演示管理员：让「打开就能登录」——首次加载且账号表为空时写入。
+   * 口令同样走 salt + SHA-256，绝不存明文；它占用「第一个账号」名额，
+   * 因此之后自助注册的账号 role='user'（与首账号为 admin 的规则一致）。 */
+  SEED_EMAIL:'admin@workbuddy.local',
+  SEED_PWD:'WorkBuddy@2026',
+  SEED_NAME:'演示管理员',
+  secureHash:true, // SubtleCrypto 可用时为 true，否则降级并标记 insecure
+  _read:function(){
+    try{
+      var raw=localStorage.getItem(this.KEY_ACCOUNTS);
+      var list=raw?JSON.parse(raw):[];
+      return Array.isArray(list)?list:[];
+    }catch(e){return [];}
+  },
+  _write:function(list){
+    try{localStorage.setItem(this.KEY_ACCOUNTS,JSON.stringify(list));}catch(e){}
+  },
+  _genSalt:function(){
+    var chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    var s='',i;
+    for(i=0;i<16;i++)s+=chars.charAt(Math.floor(Math.random()*chars.length));
+    return s;
+  },
+  _genUid:function(){return 'lu'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);},
+  /** SHA-256(salt+password) → hex；SubtleCrypto 不可用时降级为简单哈希（标记 insecure） */
+  hash:function(salt,pwd){
+    var self=this,input=salt+'|'+pwd;
+    if(typeof crypto!=='undefined'&&crypto.subtle&&crypto.subtle.digest&&typeof TextEncoder!=='undefined'){
+      return crypto.subtle.digest('SHA-256',new TextEncoder().encode(input)).then(function(buf){
+        self.secureHash=true;
+        var bytes=new Uint8Array(buf),hex='',i;
+        for(i=0;i<bytes.length;i++)hex+=('0'+bytes[i].toString(16)).slice(-2);
+        return hex;
+      }).catch(function(){ // file:// 等非安全上下文
+        self.secureHash=false;
+        return Promise.resolve('weak:'+self._weakHash(input));
+      });
+    }
+    this.secureHash=false;
+    return Promise.resolve('weak:'+this._weakHash(input));
+  },
+  /** 降级哈希：非安全，仅用于在不支持 SubtleCrypto 的环境维持演示可用性 */
+  _weakHash:function(s){
+    var h1=5381,h2=52711,i;
+    for(i=0;i<s.length;i++){var c=s.charCodeAt(i);h1=(h1*33)^c;h2=(h2*33)^c;h1&=0x7fffffff;h2&=0x7fffffff;}
+    return (h1.toString(16)+h2.toString(16)+s.length.toString(16));
+  },
+  /** 账号表为空时写入种子管理员；已有账号（哪怕被清空过又注册）则不覆盖。返回是否新建。 */
+  ensureSeed:function(){
+    var self=this;
+    if(this._read().length>0)return Promise.resolve(false);
+    var salt=this._genSalt();
+    return this.hash(salt,this.SEED_PWD).then(function(h){
+      var now=Date.now();
+      self._write([{uid:self._genUid(),email:self.SEED_EMAIL,name:self.SEED_NAME,
+        salt:salt,passHash:h,role:'admin',status:'active',
+        createdAt:now,lastLoginAt:now,seeded:true}]);
+      return true;
+    });
+  },
+  listUsers:function(){
+    var self=this;
+    return this._read().map(function(a){
+      return {uid:a.uid,email:a.email,name:a.name,role:a.role||'user',status:a.status||'active',createdAt:a.createdAt,lastLoginAt:a.lastLoginAt,hashMode:(String(a.passHash).indexOf('weak:')===0?'insecure':'sha256')};
+    }).sort(function(x,y){return (x.createdAt||0)-(y.createdAt||0);});
+  },
+  findByEmail:function(email){var e=String(email||'').trim().toLowerCase();return this._read().find(function(a){return String(a.email).toLowerCase()===e;})||null;},
+  findByUid:function(uid){return this._read().find(function(a){return a.uid===uid;})||null;},
+  register:function(email,pwd,name){
+    var self=this;
+    email=String(email||'').trim();
+    if(!isValidEmail(email))return Promise.reject(localErr('local/invalid-email'));
+    if(!pwd||pwd.length<8)return Promise.reject(localErr('local/weak-password'));
+    if(this.findByEmail(email))return Promise.reject(localErr('local/email-already-in-use'));
+    var list=this._read();
+    var salt=this._genSalt();
+    var isFirst=(list.length===0);
+    return this.hash(salt,pwd).then(function(hash){
+      var acc={uid:self._genUid(),email:email,name:String(name||''),salt:salt,passHash:hash,
+        role:isFirst?'admin':'user',status:'active',createdAt:Date.now(),lastLoginAt:Date.now()};
+      list.push(acc);
+      self._write(list);
+      try{localStorage.setItem(self.KEY_SESSION,acc.uid);}catch(e){}
+      return self.toPublicUser(acc);
+    });
+  },
+  login:function(email,pwd){
+    var self=this;
+    var acc=this.findByEmail(String(email||'').trim());
+    if(!acc)return Promise.reject(localErr('local/user-not-found'));
+    return this.hash(acc.salt,pwd).then(function(hash){
+      if(hash!==acc.passHash)throw localErr('local/wrong-password');
+      if(acc.status==='disabled')throw localErr('local/user-disabled');
+      var list=self._read();
+      for(var i=0;i<list.length;i++){if(list[i].uid===acc.uid){list[i].lastLoginAt=Date.now();acc=list[i];break;}}
+      self._write(list);
+      try{localStorage.setItem(self.KEY_SESSION,acc.uid);}catch(e){}
+      return self.toPublicUser(acc);
+    });
+  },
+  logout:function(){
+    try{localStorage.removeItem(this.KEY_SESSION);}catch(e){}
+    return Promise.resolve(true);
+  },
+  /** 会话恢复：账号为 disabled 会话被踢出并返回 null */
+  restoreSession:function(){
+    var uid=null;
+    try{uid=localStorage.getItem(this.KEY_SESSION);}catch(e){}
+    if(!uid)return null;
+    var acc=this.findByUid(uid);
+    if(!acc){this.logout();return null;}
+    if(acc.status==='disabled'){
+      this.logout();
+      showLogin('您的账号已被管理员禁用');
+      return null;
+    }
+    return this.toPublicUser(acc);
+  },
+  setRole:function(uid,role){
+    var list=this._read(),found=null,i;
+    for(i=0;i<list.length;i++){if(list[i].uid===uid){found=list[i];break;}}
+    if(!found)return Promise.reject(localErr('local/not-found'));
+    list[i].role=role;
+    this._write(list);
+    this._syncCurrent(list);
+    return Promise.resolve(true);
+  },
+  setStatus:function(uid,status){
+    var list=this._read(),found=null,i;
+    for(i=0;i<list.length;i++){if(list[i].uid===uid){found=list[i];break;}}
+    if(!found)return Promise.reject(localErr('local/not-found'));
+    list[i].status=status;
+    this._write(list);
+    this._syncCurrent(list);
+    return Promise.resolve(true);
+  },
+  /** 变更同步到当前会话用户；被禁用则踢出（对齐云端 onSnapshot 行为） */
+  _syncCurrent:function(list){
+    var uid=null;
+    try{uid=localStorage.getItem(this.KEY_SESSION);}catch(e){}
+    if(uid&&wbUser&&wbUser.uid===uid){
+      var me=list.find(function(a){return a.uid===uid;});
+      if(me&&me.status==='disabled'){
+        wbUser=null;this.logout();showLogin('您的账号已被管理员禁用');return;
+      }
+      if(me){wbUser=Object.assign({},wbUser,this.toPublicUser(me));renderUserMenu();}
+    }
+  },
+  toPublicUser:function(a){
+    return {uid:a.uid,email:a.email,displayName:a.name||'',role:a.role||'user',status:a.status||'active',createdAt:a.createdAt,lastLoginAt:a.lastLoginAt};
+  }
+};
+function localErr(code){var e=new Error(code);e.code=code;return e;}
+
+/* ---------- 云端模式实现（封装原有 Firebase 逻辑，语义与本地版一致） ---------- */
+var FirebaseAuth={
+  register:function(email,pwd,name){
+    return wbAuth.createUserWithEmailAndPassword(email,pwd).then(function(cred){
+      return cred.user.updateProfile({displayName:name});
+    });
+  },
+  login:function(email,pwd){return wbAuth.signInWithEmailAndPassword(email,pwd);},
+  logout:function(){return wbAuth.signOut();},
+  getUser:function(){return wbUser;},
+  listUsers:function(){
+    return wbDb.collection('users').orderBy('createdAt','asc').get().then(function(snap){
+      var out=[];
+      snap.forEach(function(d){var u=d.data();out.push({uid:d.id,email:u.email,displayName:u.displayName,role:u.role||'user',status:u.status||'active',createdAt:u.createdAt,lastLoginAt:u.lastLoginAt});});
+      return out;
+    });
+  },
+  setRole:function(uid,role){return wbFn.httpsCallable('setUserRole')({uid:uid,role:role});},
+  setStatus:function(uid,status){return wbDb.collection('users').doc(uid).update({status:status});},
+  onChanged:function(cb){return wbAuth.onAuthStateChanged(cb);}
+};
+
+/* ---------- 统一鉴权适配层 ---------- */
+var AuthAdapter={
+  mode:function(){return state.authMode;},
+  register:function(email,pwd,name){
+    if(state.authMode==='local'){
+      return LocalAuth.register(email,pwd,name).then(function(u){enterDashboard(u);return u;});
+    }
+    return FirebaseAuth.register(email,pwd,name); // 云端由 onAuthStateChanged 驱动进入看板
+  },
+  login:function(email,pwd){
+    if(state.authMode==='local'){
+      return LocalAuth.login(email,pwd).then(function(u){enterDashboard(u);return u;});
+    }
+    return FirebaseAuth.login(email,pwd);
+  },
+  logout:function(){return state.authMode==='local'?LocalAuth.logout():FirebaseAuth.logout();},
+  getUser:function(){return wbUser;},
+  listUsers:function(){return state.authMode==='local'?Promise.resolve(LocalAuth.listUsers()):FirebaseAuth.listUsers();},
+  setRole:function(uid,role){
+    if(uid===wbUser.uid&&role==='user')return Promise.reject(localErr('local/failed-precondition'));
+    return state.authMode==='local'?LocalAuth.setRole(uid,role):FirebaseAuth.setRole(uid,role);
+  },
+  setStatus:function(uid,status){
+    if(uid===wbUser.uid)return Promise.reject(localErr('local/failed-precondition'));
+    return state.authMode==='local'?LocalAuth.setStatus(uid,status):FirebaseAuth.setStatus(uid,status);
+  },
+  /** onAuthChanged：云端模式透传 Firebase 监听器；演示模式用 storage 事件实现跨标签页同步 */
+  onChanged:function(cb){
+    if(state.authMode==='local'){
+      var handler=function(e){if(e.key===LocalAuth.KEY_ACCOUNTS)cb();};
+      window.addEventListener('storage',handler);
+      return function(){window.removeEventListener('storage',handler);};
+    }
+    return FirebaseAuth.onChanged(cb);
+  }
+};
+/* 规格别名：对外接口同时提供 authRegister/authLogin/.../onAuthChanged 命名，
+ * 便于调用方按统一契约取用（内部实现复用上面的同名方法）。 */
+AuthAdapter.authRegister=AuthAdapter.register;
+AuthAdapter.authLogin=AuthAdapter.login;
+AuthAdapter.authLogout=AuthAdapter.logout;
+AuthAdapter.authGetUser=AuthAdapter.getUser;
+AuthAdapter.authListUsers=AuthAdapter.listUsers;
+AuthAdapter.authSetRole=AuthAdapter.setRole;
+AuthAdapter.authSetStatus=AuthAdapter.setStatus;
+AuthAdapter.onAuthChanged=AuthAdapter.onChanged;
+
+/** 演示模式「在线被踢出」：另一标签页把当前账号禁用/删除时，本页同步登出（仅绑定一次） */
+function bindLocalKick(){
+  if(state.localKickBound)return;
+  state.localKickBound=true;
+  AuthAdapter.onChanged(function(){
+    if(state.authMode!=='local'||!wbUser)return;
+    // 以本页当前登录用户为准：session 是共享的，可能已被另一标签页覆盖
+    var me=LocalAuth.findByUid(wbUser.uid);
+    if(!me||me.status==='disabled'){ // 被禁用/被删除 → 踢出
+      wbUser=null;
+      try{localStorage.removeItem(LocalAuth.KEY_SESSION);}catch(e){}
+      showLogin('您的账号已被管理员禁用');
+      return;
+    }
+    wbUser=Object.assign({},wbUser,LocalAuth.toPublicUser(me)); // 角色变更 → 同步菜单
+    renderUserMenu();
+    if(state.page==='admin')renderAdmin();
+  });
+}
+/** LocalAuth 恢复到会话后进入看板（供 bootLocalAuth 调用） */
+function handleAuthReady(user){
+  if(!user){showLogin('');return;}
+  enterDashboard(user);
+}
 </script>
 
     </div>
@@ -2286,6 +2781,33 @@ document.getElementById('wbRefreshBtn').addEventListener('click',function(){
       <span class="active" data-tab="signin" onclick="switchAuthTab('signin')">登录</span>
       <span data-tab="signup" onclick="switchAuthTab('signup')">注册</span>
     </div>
+    <div class="mode-banner" id="loginLocalBanner" style="display:none;margin-bottom:12px">
+      ⚠ <b>演示模式</b>：账号仅保存在本浏览器，换浏览器或清缓存会丢失。配置 Firebase 后自动切换为真实多用户账号体系。
+    </div>
+    <div class="demo-cred" id="demoCredBox" style="display:none">
+      <div><b>演示账号（可直接登录）</b></div>
+      <div style="margin-top:4px">
+        邮箱 <code>admin@workbuddy.local</code> ｜ 密码 <code>WorkBuddy@2026</code>
+      </div>
+      <div class="warn" style="margin-top:4px">
+        该账号只存在<b>本浏览器</b>，且<b>任何访问本网址的人都能用这组凭据登录</b>并查看演示数据（Mock）——请勿在此填写真实信息。
+        配置 Firebase 后演示账号自动失效，改为真实多用户注册登录。
+      </div>
+      <div class="actions">
+        <button class="btn" id="demoLoginBtn">一键填入并登录</button>
+      </div>
+      <div class="muted" style="margin-top:6px;font-size:11px">
+        也可以自助注册：清空演示账号后立刻注册，<b>第一个注册的账号自动成为管理员</b>；
+        若改为刷新页面，则会重新生成上面的种子演示账号。
+      </div>
+    </div>
+    <div class="err-card" id="firebaseErrCard" style="display:none">
+      <b>云端登录不可用</b>
+      <div class="body" id="firebaseErrBody"></div>
+      <div class="actions">
+        <button class="btn" id="useLocalDemoBtn">改用演示模式（本地账号）</button>
+      </div>
+    </div>
     <div class="login-form" id="signinForm">
       <label>邮箱</label><input type="email" id="signinEmail" placeholder="you@example.com" autocomplete="email">
       <label>密码</label><input type="password" id="signinPwd" placeholder="至少 8 位" autocomplete="current-password">
@@ -2298,7 +2820,7 @@ document.getElementById('wbRefreshBtn').addEventListener('click',function(){
       <label>邮箱</label><input type="email" id="signupEmail" placeholder="you@example.com" autocomplete="email">
       <label>密码</label><input type="password" id="signupPwd" placeholder="至少 8 位，建议字母+数字" autocomplete="new-password">
       <div class="pwd-strength"><div id="signupPwdBar"></div></div>
-      <div class="muted" style="margin-top:8px;font-size:11px;line-height:1.6">
+      <div class="muted" id="signupHintText" style="margin-top:8px;font-size:11px;line-height:1.6">
         首注册的用户将自动成为「管理员」（由 Cloud Functions onAuthCreate 自动 bootstrap），后续注册的为「普通用户」。
       </div>
       <button class="btn" id="signupBtn">注册并登录</button>
