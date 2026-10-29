@@ -11,6 +11,23 @@
 (function(){
   if(window.firebase) return;
 
+  /* 双轨鉴权（index.html §21）：模式由 __WB_FIREBASE_CONFIG__ 是否为占位符决定。
+   * 本 mock 用于验证「云端模式」，故在页面脚本之前把配置锁成「格式合法」的值：
+   * 不可写 + 不可配置，index.html 里的占位配置赋值（非严格模式）会静默失败。 */
+  try{
+    Object.defineProperty(window,'__WB_FIREBASE_CONFIG__',{
+      configurable:false, writable:false, enumerable:true,
+      value:{
+        apiKey:'AIzaSyMOCKKEYFORTESTINGONLY000000000000',
+        authDomain:'mock-wb-project.firebaseapp.com',
+        projectId:'mock-wb-project',
+        storageBucket:'mock-wb-project.appspot.com',
+        messagingSenderId:'000000000000',
+        appId:'1:000000000000:web:mockabcdef000000'
+      }
+    });
+  }catch(e){}
+
   var users = {};          // uid -> {uid,email,displayName,role,status,createdAt,lastLoginAt}
   var order = [];          // creation order
   var currentUser = null;  // {uid,email,displayName, updateProfile}
